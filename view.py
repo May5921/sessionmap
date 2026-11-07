@@ -130,7 +130,7 @@ def evidence_for(decision: dict[str, Any], events: list[dict[str, Any]], session
             "session_id": sid,
             "session_title": session.get("title") or "未命名会话",
             "at": event.get("occurred_at"),
-            "when": fmt_ms(event.get("occurred_at")),
+            "when": fmt_ms(event.get("occurred_at"), "%Y-%m-%d %H:%M"),
             "type": event.get("event_type"),
             "summary": compact(event.get("summary"), 240),
             "quote": compact(event.get("evidence_text") or event.get("summary"), 420),
@@ -161,7 +161,7 @@ def fact_decisions(events: list[dict[str, Any]], *, id_prefix: str = "fact:",
         summary = compact(event.get("summary") or event.get("event_type"), 120)
         result.append({
             "id": f"{id_prefix}{event.get('event_id')}",
-            "when": fmt_ms(event.get("occurred_at")),
+            "when": fmt_ms(event.get("occurred_at"), "%Y-%m-%d %H:%M"),
             "when_ms": event.get("occurred_at"),
             "title": summary,
             "track": track,
@@ -172,7 +172,7 @@ def fact_decisions(events: list[dict[str, Any]], *, id_prefix: str = "fact:",
             "evidence_refs": [{
                 "event_id": event.get("event_id"), "session_id": event.get("session_id"),
                 "session_title": event.get("session_title") or "未命名会话",
-                "when": fmt_ms(event.get("occurred_at")), "type": event.get("event_type"),
+                "when": fmt_ms(event.get("occurred_at"), "%Y-%m-%d %H:%M"), "type": event.get("event_type"),
                 "quote": compact(event.get("evidence_text") or event.get("summary"), 420),
                 "confidence": 1.0, "source_kind": event.get("source_kind"),
                 "raw_ref": event.get("raw_ref"), "event_type": event.get("event_type"),
@@ -228,7 +228,7 @@ def small_events(events: list[dict[str, Any]], linked_event_ids: set[str], limit
         seen.add(key)
         picked.append({
             "id": f"small:{event.get('event_id')}",
-            "when": fmt_ms(event.get("occurred_at")),
+            "when": fmt_ms(event.get("occurred_at"), "%Y-%m-%d %H:%M"),
             "when_ms": event.get("occurred_at"),
             "title": summary,
             "track": "补充",
@@ -241,7 +241,7 @@ def small_events(events: list[dict[str, Any]], linked_event_ids: set[str], limit
             "evidence_refs": [{
                 "event_id": event.get("event_id"), "session_id": event.get("session_id"),
                 "session_title": event.get("session_title") or "未命名会话",
-                "when": fmt_ms(event.get("occurred_at")), "type": event.get("event_type"),
+                "when": fmt_ms(event.get("occurred_at"), "%Y-%m-%d %H:%M"), "type": event.get("event_type"),
                 "quote": compact(event.get("evidence_text") or summary, 420),
                 "confidence": 1.0, "source_kind": event.get("source_kind"),
                 "raw_ref": event.get("raw_ref"), "event_type": event.get("event_type"),
