@@ -3,7 +3,11 @@ __pycache__/
 .playwright-cli/
 .ui-check.png
 output/
+demo/index.html
+map.html
 *.db
+*.db-shm
+*.db-wal
 *.sqlite
 *.jsonl
 report.html
@@ -16,6 +20,11 @@ share-view.json
 compare-self.json
 consistency.json
 adapter-pi-report.html
+bench*.json
+bench*.md
+canonical*.json
+sessionmap-*-view.json
+semantic-incremental-plan.json
 benchmarks/*.json
 benchmarks/*.log
 benchmarks/*.db

@@ -1,0 +1,23 @@
+# sessionmap 完成审计
+
+更新时间：2026-11-07
+
+## 已验证
+
+- 六种适配器（ZCode、Claude、Codex、Pi、DSH、OpenCode）本机探测均为 `ready`。
+- Claude 原始事件已映射到统一事件类型，并保留 `raw_kind`；未知类型降级为 `source_event`。
+- 事件 upsert 会更新内容指纹；部分导入会返回 `partial`、跳过会话和错误。
+- 两个真实工作区事实层对账通过。`pi-mini` 有 11 个语义决策和 20 条证据；`shop-transfer-mini-program` 有 82 个会话、19,043 个事件。
+- 语义层保存输入哈希、模型、提示版本、运行时间、置信度、证据链接、节点 manifest 和人工修正。
+- `semantic.py --plan`、`extract.py --incremental-from/--incremental-plan` 和 `pipeline.py --incremental` 已接通；`matched` 不调用模型，`changed` 只发送受影响事实和旧决策上下文。
+- `watch.py` 只刷新本地事实和事件线；新增事实会显示为“待提炼”，不会冒充模型决策。
+- 事件线支持自上次查看、工作线/来源/工具筛选、搜索、阶段折叠（语义节点提供阶段时）、证据抽屉、Git 事实和静态分享页。
+- 30/30 单元测试、33/33 `pi-mini` 验收、一致性检查 0 warnings、Python/JavaScript 语法检查通过。
+- 大工作区有界语义验收通过：20,000 字符输入、12 个决策、16 条证据；`--require-semantic` 实测 26/26 通过，增量同步 2.577 秒且无事件增长。
+
+## 当前边界
+
+- 大工作区完整 46,574 字符时间线在 180 秒窗口内未完成；当前采用有界语义和增量重提炼路径，记录在 `benchmarks/shop-transfer-semantic-pi-full-timeout.json`。
+- DSH/Codex 压缩流的逻辑游标支持增量，但物理读取仍需从压缩流开头扫描。
+- 证据抽屉显示原始引用、会话和事实字段；`part:` 等本地源引用目前是可复制的文本标识，不是操作系统深链。
+- 团队协作、云同步、用户自定义事件类型和通知服务属于后续范围，当前保持本地只读产品边界。

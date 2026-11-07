@@ -1,0 +1,100 @@
+{
+  "workspace": "C:\\Users\\Luke\\projects\\pi-mini",
+  "decisions": [
+    {
+      "id": "D1",
+      "when": "2026-11-03 04:37",
+      "title": "先做获客地图",
+      "track": "推广调研",
+      "status": "done",
+      "evidence_keywords": [
+        "爆款github项目"
+      ]
+    },
+    {
+      "id": "D2",
+      "when": "2026-11-03 21:08",
+      "title": "可插拔 GUI 架构",
+      "track": "主干",
+      "status": "open",
+      "evidence_keywords": [
+        "可插拔",
+        "opencode"
+      ]
+    },
+    {
+      "id": "D3",
+      "when": "2026-11-03 21:46",
+      "title": "抄骨不抄皮",
+      "track": "DSH 对标",
+      "status": "open",
+      "evidence_keywords": [
+        "抄皮不抄骨"
+      ]
+    },
+    {
+      "id": "D6",
+      "when": "2026-11-04 00:43",
+      "title": "改名换图标",
+      "track": "品牌化",
+      "status": "done",
+      "evidence_keywords": [
+        "改名字",
+        "换图标"
+      ]
+    },
+    {
+      "id": "D7",
+      "when": "2026-11-04 01:09",
+      "title": "暂停 opencode",
+      "track": "适配器接入",
+      "status": "abandoned",
+      "evidence_keywords": [
+        "别做open code兼容",
+        "专注于pi"
+      ]
+    },
+    {
+      "id": "D9",
+      "when": "2026-11-04 02:30",
+      "title": "只做 TUI 的 GUI",
+      "track": "主干",
+      "status": "done",
+      "evidence_keywords": [
+        "只做tui的gui"
+      ]
+    },
+    {
+      "id": "D10",
+      "when": "2026-11-04 02:33",
+      "title": "OMP 接入叫停",
+      "track": "适配器接入",
+      "status": "open",
+      "evidence_keywords": [
+        "不要omp",
+        "只要pi"
+      ]
+    },
+    {
+      "id": "D11",
+      "when": "2026-11-06 13:23",
+      "title": "切换工作区回归",
+      "track": "主干",
+      "status": "open",
+      "evidence_keywords": [
+        "不能切换工作区"
+      ]
+    }
+  ],
+  "expected": {
+    "sessions": 32,
+    "main_sessions": 4,
+    "child_sessions": 28,
+    "tool_calls": 4462,
+    "user_messages": 150,
+    "assistant_messages": 349,
+    "todo_changes": 50,
+    "memory_breaks": 2,
+    "decisions": 11
+  }
+}
