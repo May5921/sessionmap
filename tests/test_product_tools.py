@@ -29,6 +29,8 @@ class ProductToolTests(unittest.TestCase):
         self.assertIn('id="toolFilter"', template)
         self.assertIn('id="stageToggle"', template)
         self.assertIn('class="ev-ref"', template)
+        self.assertIn('curatedExtras=allExtras.filter', template)
+        self.assertIn('attribution_score||0)>=0.55', template)
 
     def test_compare_reports_decision_fact_and_git_changes(self):
         before = {"workspace": {"id": "w"}, "generated_at": 1,
@@ -111,6 +113,7 @@ class ProductToolTests(unittest.TestCase):
             self.assertEqual(result["analysis"]["pending_fact_count"], 1)
             self.assertEqual(result["decisions"][-1]["id"], "pending:e2")
             self.assertEqual(result["decisions"][-1]["track"], "待提炼")
+            self.assertNotIn("small:e2", {item["id"] for item in result["small_events"]})
 
     def test_small_events_keep_unlinked_high_signal_facts(self):
         events = [
@@ -135,6 +138,16 @@ class ProductToolTests(unittest.TestCase):
         self.assertEqual(result[0]["anchor_id"], "D1")
         self.assertGreaterEqual(result[0]["attribution_score"], 0.8)
         self.assertIn("同一会话", result[0]["attribution_reasons"])
+
+    def test_weak_small_event_stays_unanchored(self):
+        events = [{"event_id": "e1", "event_type": "error", "occurred_at": 1,
+                   "summary": "无关失败", "evidence_text": "无关失败", "session_id": "s2",
+                   "source_kind": "dsh"}]
+        decisions = [{"id": "D1", "when_ms": 10**15, "title": "方向", "what": "确定路线",
+                      "why": "用户确认", "evidence_refs": [{"session_id": "s1", "source_kind": "pi"}]}]
+        result = small_events(events, set(), decisions)
+        self.assertIsNone(result[0]["anchor_id"])
+        self.assertLess(result[0]["attribution_score"], 0.55)
 
     def test_render_creates_local_evidence_viewer(self):
         with tempfile.TemporaryDirectory() as tmp:

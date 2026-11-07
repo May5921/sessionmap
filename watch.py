@@ -86,7 +86,7 @@ def refresh(workspace: str, source_db: str, out_dir: Path, workspace_id: str | N
         merge_stores(source_stores, final_store, resolve_root_hint(workspace))
         view = out_dir / "merged-project-view.json"
         canonical = out_dir / "merged-canonical-timeline.json"
-        run("生成多 Agent 合并视图", [str(ROOT / "view.py"), str(final_store), "--out", str(view)])
+        run("生成多 Agent 合并视图", [str(ROOT / "view.py"), str(final_store), str(timeline), "--out", str(view)])
     run("生成工具无关时间线", [str(ROOT / "canonical_timeline.py"), str(final_store),
                               "--out", str(canonical)])
     run("渲染事件线", [str(ROOT / "eventline_dashboard.py"), str(view), "--out", str(report)])

@@ -86,6 +86,33 @@ def fetch_user_texts(con, session_id, max_msgs, trunc, budget=8000):
     return out
 
 
+def fetch_child_user_texts(con, session_ids, trunc, max_msgs=8, budget=3500):
+    """Keep a bounded, chronological sample of child-agent user messages.
+
+    Child sessions are still collapsed in the main session tree, but their
+    high-signal prompts can contain the actual delegated decision.  Preserve a
+    small deduplicated sample so semantic extraction can see that context
+    without expanding every tool transcript.
+    """
+    if not session_ids:
+        return []
+    rows = []
+    for session_id in session_ids:
+        rows.extend(fetch_user_texts(con, session_id, max_msgs=12, trunc=trunc, budget=2200))
+    rows.sort(key=lambda row: (row[0] or 0, row[1]))
+    result, seen, used = [], set(), 0
+    for created, text in rows:
+        key = " ".join(str(text or "").split())
+        if not key or key in seen:
+            continue
+        if len(result) >= max_msgs or used + len(key) > budget:
+            continue
+        seen.add(key)
+        result.append((created, key))
+        used += len(key)
+    return result
+
+
 def fetch_action(con, session_ids):
     """工具调用聚合: 工具分布 / 改动最多的文件 / 跑过的命令"""
     if not session_ids:
@@ -252,6 +279,14 @@ def build(workspace, db_path, since, per_session, trunc, verbose):
                 L.append("- `%s` %s" % (ts(created, "%m-%d %H:%M"), text))
             else:
                 L.append("- %s" % text)
+        child_texts = fetch_child_user_texts(con, subs, trunc)
+        if child_texts:
+            L.append("子会话关键信息:")
+            for created, text in child_texts:
+                if created:
+                    L.append("- `[子代理 %s]` %s" % (ts(created, "%m-%d %H:%M"), text))
+                else:
+                    L.append("- `[子代理]` %s" % text)
         L.append("")
 
     return "\n".join(L)

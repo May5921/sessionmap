@@ -410,6 +410,8 @@ def main():
     ap.add_argument("--cli", default=None, help="claude / codex / pi / opencode")
     ap.add_argument("--out", default=None, help="输出 json 路径, 默认与 timeline 同名 .json")
     ap.add_argument("--max-chars", type=int, default=20000)
+    ap.add_argument("--allow-truncate", action="store_true",
+                    help="明确允许非分片输入超过 --max-chars 时截断（可能丢失后半段事实）")
     ap.add_argument("--timeout", type=int, default=300)
     ap.add_argument("--no-proxy", action="store_true",
                     help="只对本次本机 CLI 调用移除代理环境变量，不修改系统配置")
@@ -455,7 +457,11 @@ def main():
               (meta.get("chunks"), len(data.get("decisions", [])), dest), file=sys.stderr)
         return
     if len(timeline) > a.max_chars:
-        print("[warn] 时间线 %d 字符, 截断到 %d" % (len(timeline), a.max_chars), file=sys.stderr)
+        if not a.allow_truncate:
+            sys.exit("时间线 %d 字符超过 --max-chars %d；请使用 --chunked，或显式添加 --allow-truncate" %
+                     (len(timeline), a.max_chars))
+        print("[warn] 时间线 %d 字符, 截断到 %d（已显式允许，可能丢失后半段事实）" %
+              (len(timeline), a.max_chars), file=sys.stderr)
         timeline = timeline[:a.max_chars]
 
     prompt = PROMPT.replace("{timeline}", timeline)

@@ -269,6 +269,15 @@ def merge_stores(input_paths: Iterable[str | Path], output_path: str | Path,
             decisions.sort(key=lambda item: (item[0], item[1], item[2]))
             run_id = f"semantic:merged:{workspace_id}:{hashlib.sha256('|'.join(f'{x[1]}:{x[2]}' for x in decisions).encode()).hexdigest()[:20]}"
             if decisions:
+                # Keep the latest source semantic notes in the merged store so
+                # the merged view still explains what remains unfinished and
+                # what keeps recurring.  Notes are a display projection; the
+                # source stores remain untouched.
+                note_source = max(
+                    decision_sources,
+                    key=lambda item: int(item[2]["completed_at"] or 0),
+                    default=None,
+                )
                 store.execute(
                     """INSERT INTO analysis_run(run_id,workspace_id,semantic_source,input_hash,model,prompt_version,facts_version,status,
                        started_at,completed_at,summary_json) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
@@ -298,7 +307,22 @@ def merge_stores(input_paths: Iterable[str | Path], output_path: str | Path,
                              ref["source_json"], stamp),
                         )
                 store.execute("UPDATE analysis_run SET summary_json=? WHERE run_id=?",
-                              (json.dumps({"decisions": len(decisions), "sources": source_kinds}, ensure_ascii=False), run_id))
+                              (json.dumps({"decisions": len(decisions), "sources": source_kinds,
+                                           "notes_source": note_source[1]["source_kind"] if note_source else None},
+                                          ensure_ascii=False), run_id))
+                if note_source:
+                    source_con, _source_workspace, source_run = note_source
+                    for note in source_con.execute(
+                        "SELECT kind,content_json FROM analysis_note WHERE run_id=? ORDER BY kind",
+                        (source_run["run_id"],),
+                    ):
+                        note_id = f"{run_id}:{note['kind']}"
+                        store.execute(
+                            """INSERT OR REPLACE INTO analysis_note(
+                               note_id,run_id,workspace_id,kind,content_json,created_at)
+                               VALUES(?,?,?,?,?,?)""",
+                            (note_id, run_id, workspace_id, note["kind"], note["content_json"], stamp),
+                        )
             result_roots.append({"root": root, "workspace_id": workspace_id, "sources": source_kinds,
                                  "sessions": session_count, "events": event_count, "decisions": len(decisions)})
         store.commit()

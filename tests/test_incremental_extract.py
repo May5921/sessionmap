@@ -1,5 +1,7 @@
 import json
 import sqlite3
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -88,6 +90,21 @@ class IncrementalExecutionTests(unittest.TestCase):
         source = (ROOT / "pipeline.py").read_text(encoding="utf-8")
         self.assertIn("plan_data.get(\"mode\") in {\"changed\", \"matched\"}", source)
         self.assertIn("回退到完整语义提炼", source)
+
+    def test_extract_rejects_truncation_without_explicit_opt_in(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            timeline = root / "timeline.md"
+            output = root / "timeline.json"
+            timeline.write_text("# 工作区\n\n" + ("事实 " * 40), encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, str(ROOT / "extract.py"), str(timeline), "--max-chars", "20",
+                 "--cli", "pi", "--out", str(output)],
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("--chunked", result.stderr)
+            self.assertFalse(output.exists())
 
 
 if __name__ == "__main__":

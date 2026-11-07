@@ -81,6 +81,32 @@ class WorkspaceMergeTests(unittest.TestCase):
             self.assertEqual(payload["source_kinds"], ["codex", "zcode"])
             con.close()
 
+    def test_latest_semantic_notes_survive_merge(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            zcode = root / "zcode.db"
+            merged = root / "merged.db"
+            self.make_source(zcode, "zcode", "z1")
+            con = sqlite3.connect(zcode)
+            con.execute(
+                "INSERT INTO analysis_run(run_id,workspace_id,semantic_source,input_hash,status,started_at,completed_at,summary_json) VALUES(?,?,?,?,?,?,?,?)",
+                ("r1", "zcode:w", "timeline.json", "h1", "succeeded", 1, 10, "{}"),
+            )
+            con.execute(
+                "INSERT INTO decision(decision_id,run_id,workspace_id,external_id,ordinal,occurred_at,track,title,what,why,alternative,status,confidence,source_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                ("r1:D1", "r1", "zcode:w", "D1", 1, 2, "主干", "方向", "确定方向", "用户确认", None, "open", 0.9, "{}", 1, 10),
+            )
+            con.execute(
+                "INSERT INTO analysis_note(note_id,run_id,workspace_id,kind,content_json,created_at) VALUES(?,?,?,?,?,?)",
+                ("r1:unfinished", "r1", "zcode:w", "unfinished", '["继续验证"]', 10),
+            )
+            con.commit()
+            con.close()
+            merge_stores([zcode], merged, "C:/repo")
+            con = sqlite3.connect(merged)
+            self.assertEqual(con.execute("SELECT content_json FROM analysis_note WHERE kind='unfinished'").fetchone()[0], '["继续验证"]')
+            con.close()
+
 
 if __name__ == "__main__":
     unittest.main()

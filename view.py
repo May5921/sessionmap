@@ -210,10 +210,13 @@ def small_events(events: list[dict[str, Any]], linked_event_ids: set[str],
     candidates.sort(key=lambda event: (event.get("occurred_at") or 0, event.get("event_id") or ""))
     # A merged workspace should show that several agents contributed.  Seed
     # one high-signal fact per source before filling the remaining slots by
-    # time, while keeping the total small.
+    # time, while keeping the total small.  Ordinary user chatter is not a
+    # source-coverage signal and should not displace a useful fact.
     source_seed: list[dict[str, Any]] = []
     for source in sorted({str(event.get("source_kind") or "") for event in candidates}):
-        source_events = [event for event in candidates if str(event.get("source_kind") or "") == source]
+        source_events = [event for event in candidates
+                         if str(event.get("source_kind") or "") == source
+                         and priority.get(event.get("event_type"), 0) >= 7]
         source_events.sort(key=lambda event: (-priority[event.get("event_type")], event.get("occurred_at") or 0,
                                                event.get("event_id") or ""))
         if source_events:
@@ -266,6 +269,8 @@ def small_events(events: list[dict[str, Any]], linked_event_ids: set[str],
             continue
         seen.add(key)
         anchor_id, attribution_score, attribution_reasons = attribution(event)
+        if attribution_score < 0.55:
+            anchor_id = None
         relation = "关联上下文" if attribution_score >= 0.55 else "附近事实"
         picked.append({
             "id": f"small:{event.get('event_id')}",
@@ -383,6 +388,15 @@ def build_view(store_path: str, timeline_path: str | None = None, out_path: str 
         item["evidence_count"] = len(item["evidence_refs"])
         decisions.append(item)
 
+    # Pending and facts-only projections are already visible as decision rows;
+    # keep their source events out of the supplementary list to avoid showing
+    # the same fact twice.
+    linked_event_ids.update(
+        ref.get("event_id")
+        for decision in decisions
+        for ref in (decision.get("evidence_refs") or [])
+        if ref.get("event_id")
+    )
     supplement = small_events(events, linked_event_ids, decisions)
 
     linked_decisions = sum(1 for item in decisions if item.get("evidence_count"))
@@ -447,6 +461,11 @@ def build_view(store_path: str, timeline_path: str | None = None, out_path: str 
 
     recurring = notes.get("recurring") if semantic_decisions else timeline.get("recurring", [])
     lost_after_compaction = notes.get("lost_after_compaction") if semantic_decisions else timeline.get("lost_after_compaction")
+    headline = timeline.get("headline") or ("事实已同步，等待项目语义提炼" if facts_only else "等待项目理解结果")
+    story = timeline.get("story")
+    if not story or story == headline:
+        current_title = decisions[-1].get("title") if decisions else "等待下一步"
+        story = "现在停在「%s」，还有 %d 件事未收口。" % (current_title, len(unfinished))
 
     result = {
         "schema_version": 1,
@@ -472,8 +491,8 @@ def build_view(store_path: str, timeline_path: str | None = None, out_path: str 
                      "pending_fact_count": sum(1 for item in decisions if str(item.get("id", "")).startswith("pending:")),
                      "decision_count": len(decisions), "linked_decisions": linked_decisions,
                      "evidence_coverage": evidence_coverage},
-        "headline": timeline.get("headline") or ("事实已同步，等待项目语义提炼" if facts_only else "等待项目理解结果"),
-        "story": timeline.get("story") or timeline.get("headline") or ("当前展示的是可回溯事实，完成语义提炼后会出现项目转折。" if facts_only else "项目正在形成可回溯的工作记忆。"),
+        "headline": headline,
+        "story": story,
         "recurring": recurring or [],
         "unfinished": unfinished,
         "lost_after_compaction": lost_after_compaction,

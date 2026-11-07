@@ -96,7 +96,7 @@ def main() -> None:
         final_store = merged_store
         final_view = out / "merged-project-view.json"
         final_canonical = out / "merged-canonical-timeline.json"
-        run("生成多 Agent 合并视图", [str(ROOT / "view.py"), str(final_store), "--out", str(final_view)])
+        run("生成多 Agent 合并视图", [str(ROOT / "view.py"), str(final_store), str(timeline_json), "--out", str(final_view)])
         run("生成合并时间线", [str(ROOT / "canonical_timeline.py"), str(final_store), "--out", str(final_canonical)])
     run("渲染事件线", [str(ROOT / "eventline_dashboard.py"), str(final_view), "--out", str(report)])
     print(json.dumps({"store": str(final_store), "timeline": str(timeline_json), "canonical_timeline": str(final_canonical),
