@@ -15,6 +15,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from workspace_merge import discover_source_stores, merge_stores, resolve_root_hint
+
 
 ROOT = Path(__file__).resolve().parent
 SOURCE_DB = os.path.expandvars(r"%USERPROFILE%\.zcode\cli\db\db.sqlite")
@@ -35,9 +37,17 @@ def main() -> None:
                     help="--extract 时只提炼 semantic.py --plan 标出的受影响节点")
     ap.add_argument("--no-proxy", action="store_true",
                     help="只对本次本机 CLI 调用移除代理环境变量，不修改系统配置")
+    ap.add_argument("--chunked", action="store_true",
+                    help="--extract 时按日期/会话分片提炼长时间线")
+    ap.add_argument("--chunk-chars", type=int, default=12000,
+                    help="分片字符上限，默认 12000")
+    ap.add_argument("--no-merge", action="store_true",
+                    help="关闭同一仓库下多 Agent canonical store 的自动合并")
     ap.add_argument("--workspace-id", default=None, help="多工作区 store 中明确选择的 workspace_id")
     ap.add_argument("--out", default=str(ROOT), help="输出目录，默认当前 sessionmap 目录")
     args = ap.parse_args()
+    if args.chunked and args.incremental:
+        ap.error("--chunked 不能和 --incremental 同时使用")
     out = Path(args.out).resolve()
     out.mkdir(parents=True, exist_ok=True)
     store = out / "sessionmap.db"
@@ -68,6 +78,8 @@ def main() -> None:
             extract_args.extend(["--cli", args.cli])
         if args.no_proxy:
             extract_args.append("--no-proxy")
+        if args.chunked:
+            extract_args.extend(["--chunked", "--chunk-chars", str(args.chunk_chars)])
         run("增量提炼受影响语义" if incremental_run else "调用本机 CLI 提炼语义", extract_args)
     else:
         print("[sessionmap] 复用已有 timeline.json（需要新语义时加 --extract）", file=sys.stderr)
@@ -75,9 +87,20 @@ def main() -> None:
     run("持久化语义层", [str(ROOT / "semantic.py"), str(store), str(timeline_json), "--view", str(view), *workspace_args])
     run("生成最终项目视图", [str(ROOT / "view.py"), str(store), str(timeline_json), "--out", str(view), *workspace_args])
     run("生成工具无关时间线", [str(ROOT / "canonical_timeline.py"), str(store), "--out", str(canonical_timeline), *workspace_args])
-    run("渲染事件线", [str(ROOT / "eventline_dashboard.py"), str(view), "--out", str(report)])
-    print(json.dumps({"store": str(store), "timeline": str(timeline_json), "canonical_timeline": str(canonical_timeline),
-                      "view": str(view), "report": str(report)}, ensure_ascii=False, indent=2))
+    final_store, final_view, final_canonical = store, view, canonical_timeline
+    source_stores = discover_source_stores(store, ROOT)
+    root_hint = resolve_root_hint(args.workspace)
+    if not args.no_merge and len(source_stores) > 1:
+        merged_store = out / "sessionmap-merged.db"
+        merge_stores(source_stores, merged_store, root_hint)
+        final_store = merged_store
+        final_view = out / "merged-project-view.json"
+        final_canonical = out / "merged-canonical-timeline.json"
+        run("生成多 Agent 合并视图", [str(ROOT / "view.py"), str(final_store), "--out", str(final_view)])
+        run("生成合并时间线", [str(ROOT / "canonical_timeline.py"), str(final_store), "--out", str(final_canonical)])
+    run("渲染事件线", [str(ROOT / "eventline_dashboard.py"), str(final_view), "--out", str(report)])
+    print(json.dumps({"store": str(final_store), "timeline": str(timeline_json), "canonical_timeline": str(final_canonical),
+                      "view": str(final_view), "report": str(report), "merged_sources": len(source_stores) if not args.no_merge else 1}, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":

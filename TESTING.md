@@ -32,7 +32,9 @@ Claude 的原始 `type` 会统一映射为 canonical event type，并在 payload
 - HTML 中事件和断裂标记的数量是否正确。
 - 语义层是否按输入哈希幂等写入分析运行、决策和证据链接。
 
-当前自动化单元测试为 **32 passed**，覆盖六种适配器的统一事件契约、幂等导入、内容指纹变化、部分导入告警、跨来源工作区合并、canonical timeline、facts-only fallback、语义节点 manifest、增量语义计划与合并、小事件补充、快照对比、矛盾检查、人工修正、搜索、脱敏导出、待提炼事实和首屏事件线状态。
+当前自动化单元测试为 **36 passed**，覆盖六种适配器的统一事件契约、幂等导入、内容指纹变化、部分导入告警、跨来源工作区合并与去重、canonical timeline、facts-only fallback、语义节点 manifest、增量语义计划与合并、分片语义切分与合并、小事件归属与嵌入、证据深链、快照对比、矛盾检查、人工修正、搜索、脱敏导出、待提炼事实和首屏事件线状态。
+
+自动合并 smoke 会在同一仓库根目录下发现 ZCode、Codex、Pi、DSH 和 OpenCode 的 canonical store，输出 `sessionmap-merged.db`、`merged-project-view.json`、`merged-canonical-timeline.json`、`report.html` 和 `evidence.html`。合并只读源库，并按 Git commit SHA 等稳定事实去重；跨工具相同事实会保留来源列表。
 
 黄金样本位于 `tests/gold_pi_mini.json`。它只固定少量高价值节点，避免把整个模型输出锁死；新增或修改提炼逻辑时，先更新分析，再明确更新黄金样本。
 

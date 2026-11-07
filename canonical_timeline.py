@@ -109,6 +109,7 @@ def load_decisions(con: sqlite3.Connection, workspace_id: str, run: dict[str, An
                 "raw_ref": event_row["raw_ref"] if event_row else source_ref.get("raw_ref"),
                 "event_type": event_row["event_type"] if event_row else evidence.get("type"),
                 "fact": _fact_payload(event_payload),
+                "payload": event_payload,
             })
         item["evidence_count"] = len(item["evidence_refs"])
         for key in ("decision_id", "run_id", "workspace_id", "external_id", "ordinal", "occurred_at",

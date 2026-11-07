@@ -9,12 +9,25 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from extract import build_incremental_prompt, merge_incremental_result
+from extract import build_incremental_prompt, merge_chunk_results, split_timeline, merge_incremental_result
 from semantic import build_incremental_plan, sync_semantic
 from sync import SCHEMA
 
 
 class IncrementalExecutionTests(unittest.TestCase):
+    def test_chunk_split_preserves_timeline_and_merge_relabels_ids(self):
+        timeline = "# 工作区\n\n## 2026-01-01\n\n### 00:00 · A\n- 用户决定 A\n\n## 2026-01-02\n\n### 00:00 · B\n- 用户决定 B\n"
+        chunks = split_timeline(timeline, 60)
+        self.assertGreaterEqual(len(chunks), 2)
+        self.assertEqual("".join(chunks), timeline)
+        merged = merge_chunk_results([
+            {"headline": "old", "decisions": [{"id": "D1", "when": "2026-01-01 00:00", "track": "主干", "title": "A", "evidence": "a"}], "recurring": ["r1"], "unfinished": ["u1"]},
+            {"headline": "new", "decisions": [{"id": "D1", "when": "2026-01-01 00:00", "track": "主干", "title": "A", "evidence": "longer evidence"}, {"id": "D1", "when": "2026-01-02 00:00", "track": "主干", "title": "B", "evidence": "b"}], "recurring": ["r2"], "unfinished": ["u2"]},
+        ])
+        self.assertEqual([item["id"] for item in merged["decisions"]], ["D1", "D2"])
+        self.assertEqual(merged["decisions"][0]["evidence"], "longer evidence")
+        self.assertEqual(merged["chunked"]["chunks"], 2)
+
     def test_merge_preserves_unaffected_nodes_and_applies_patch(self):
         previous = {
             "headline": "old",

@@ -1,3 +1,4 @@
+import json
 import sqlite3
 import tempfile
 import unittest
@@ -15,6 +16,7 @@ from search import search_store
 from privacy import make_share_view
 from sync import SCHEMA
 from view import build_view, small_events
+from eventline_dashboard import render
 
 
 class ProductToolTests(unittest.TestCase):
@@ -122,6 +124,28 @@ class ProductToolTests(unittest.TestCase):
         result = small_events(events, {"e3"})
         self.assertEqual([item["id"] for item in result], ["small:e1"])
         self.assertTrue(result[0]["small"])
+
+    def test_small_event_attribution_explains_anchor(self):
+        events = [{"event_id": "e1", "event_type": "user_message", "occurred_at": 1000,
+                   "summary": "补充方向", "evidence_text": "补充方向", "session_id": "s1",
+                   "source_kind": "pi"}]
+        decisions = [{"id": "D1", "when_ms": 1000, "title": "方向", "what": "补充方向",
+                      "why": "用户确认", "evidence_refs": [{"session_id": "s1", "source_kind": "pi"}]}]
+        result = small_events(events, set(), decisions)
+        self.assertEqual(result[0]["anchor_id"], "D1")
+        self.assertGreaterEqual(result[0]["attribution_score"], 0.8)
+        self.assertIn("同一会话", result[0]["attribution_reasons"])
+
+    def test_render_creates_local_evidence_viewer(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            view = root / "view.json"
+            report = root / "report.html"
+            view.write_text(json.dumps({"workspace": {"name": "demo", "source": "merged"},
+                                        "stats": {}, "decisions": [], "small_events": []}), encoding="utf-8")
+            render(str(view), str(report))
+            self.assertTrue((root / "evidence.html").exists())
+            self.assertIn("原始事实载荷", (root / "evidence.html").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

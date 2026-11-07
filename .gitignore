@@ -8,10 +8,16 @@ map.html
 *.db
 *.db-shm
 *.db-wal
+*-merged.db
 *.sqlite
 *.jsonl
 report.html
+evidence.html
 project-view.json
+merged-*.json
+merged-*.html
+sessionmap-merged.db
+*-merged.db
 canonical-timeline.json
 timeline.json
 timeline.md
@@ -23,6 +29,7 @@ adapter-pi-report.html
 bench*.json
 bench*.md
 canonical*.json
+merged-*.json
 sessionmap-*-view.json
 semantic-incremental-plan.json
 benchmarks/*.json

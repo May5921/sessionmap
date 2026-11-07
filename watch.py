@@ -22,6 +22,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from workspace_merge import discover_source_stores, merge_stores, resolve_root_hint
+
 
 ROOT = Path(__file__).resolve().parent
 DEFAULT_SOURCE = os.path.expandvars(r"%USERPROFILE%\.zcode\cli\db\db.sqlite")
@@ -51,7 +53,7 @@ def has_semantic_run(store: Path) -> bool:
 
 
 def refresh(workspace: str, source_db: str, out_dir: Path, workspace_id: str | None = None,
-            timeline_path: Path | None = None) -> dict[str, Any]:
+            timeline_path: Path | None = None, merge_sources: bool = True) -> dict[str, Any]:
     out_dir.mkdir(parents=True, exist_ok=True)
     store = out_dir / "sessionmap.db"
     timeline = timeline_path or (out_dir / "timeline.json")
@@ -62,6 +64,7 @@ def refresh(workspace: str, source_db: str, out_dir: Path, workspace_id: str | N
 
     sync_output = run("同步新增事实", [str(ROOT / "sync.py"), workspace,
                                       "--db", source_db, "--out", str(store)])
+    final_store = store
     if timeline.exists():
         if not has_semantic_run(store):
             # Seed a fresh local output store from the last persisted semantic
@@ -77,8 +80,15 @@ def refresh(workspace: str, source_db: str, out_dir: Path, workspace_id: str | N
     else:
         run("生成事实视图", [str(ROOT / "view.py"), str(store),
                              "--out", str(view), *workspace_args])
-    run("生成工具无关时间线", [str(ROOT / "canonical_timeline.py"), str(store),
-                              "--out", str(canonical), *workspace_args])
+    source_stores = discover_source_stores(store, ROOT)
+    if merge_sources and len(source_stores) > 1:
+        final_store = out_dir / "sessionmap-merged.db"
+        merge_stores(source_stores, final_store, resolve_root_hint(workspace))
+        view = out_dir / "merged-project-view.json"
+        canonical = out_dir / "merged-canonical-timeline.json"
+        run("生成多 Agent 合并视图", [str(ROOT / "view.py"), str(final_store), "--out", str(view)])
+    run("生成工具无关时间线", [str(ROOT / "canonical_timeline.py"), str(final_store),
+                              "--out", str(canonical)])
     run("渲染事件线", [str(ROOT / "eventline_dashboard.py"), str(view), "--out", str(report)])
     data: dict[str, Any] = {}
     try:
@@ -88,11 +98,13 @@ def refresh(workspace: str, source_db: str, out_dir: Path, workspace_id: str | N
     return {
         "workspace": workspace,
         "store": str(store),
+        "final_store": str(final_store),
         "view": str(view),
         "report": str(report),
         "events": data.get("stats", {}).get("events"),
         "decisions": data.get("analysis", {}).get("decision_count"),
         "pending_facts": data.get("analysis", {}).get("pending_fact_count", 0),
+        "merged_sources": len(source_stores) if merge_sources else 1,
         "sync": sync_output[-800:],
     }
 
@@ -106,6 +118,7 @@ def main() -> None:
     ap.add_argument("--workspace-id", default=None)
     ap.add_argument("--interval", type=float, default=5.0, help="轮询秒数，默认 5")
     ap.add_argument("--once", action="store_true", help="只刷新一次")
+    ap.add_argument("--no-merge", action="store_true", help="关闭同一仓库下多 Agent canonical store 的自动合并")
     args = ap.parse_args()
     if args.interval <= 0:
         ap.error("--interval 必须大于 0")
@@ -115,7 +128,7 @@ def main() -> None:
     )
     while True:
         try:
-            print(json.dumps(refresh(args.workspace, args.db, out_dir, args.workspace_id, timeline),
+            print(json.dumps(refresh(args.workspace, args.db, out_dir, args.workspace_id, timeline, not args.no_merge),
                              ensure_ascii=False, indent=2))
         except KeyboardInterrupt:
             print("[sessionmap] 已停止", file=sys.stderr)

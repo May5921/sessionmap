@@ -57,6 +57,30 @@ class WorkspaceMergeTests(unittest.TestCase):
             self.assertEqual(con.execute("SELECT count(*) FROM event").fetchone()[0], 2)
             con.close()
 
+    def test_git_commit_is_collapsed_across_sources(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            zcode = root / "zcode.db"
+            codex = root / "codex.db"
+            merged = root / "merged.db"
+            self.make_source(zcode, "zcode", "z1")
+            self.make_source(codex, "codex", "c1")
+            for path, source in ((zcode, "zcode"), (codex, "codex")):
+                con = sqlite3.connect(path)
+                con.execute(
+                    "INSERT INTO event(event_id,workspace_id,source_kind,source_id,event_type,actor,occurred_at,summary,payload_json,evidence_text,raw_ref,fingerprint,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (f"{source}:git", f"{source}:w", source, "abc123", "git_commit", "git", 4,
+                     "ship", json.dumps({"sha": "abc123", "subject": "ship"}), "ship", "git:abc123", f"{source}-fp", 4),
+                )
+                con.commit()
+                con.close()
+            merge_stores([zcode, codex], merged, "C:/repo")
+            con = sqlite3.connect(merged)
+            self.assertEqual(con.execute("SELECT count(*) FROM event WHERE event_type='git_commit'").fetchone()[0], 1)
+            payload = json.loads(con.execute("SELECT payload_json FROM event WHERE event_type='git_commit'").fetchone()[0])
+            self.assertEqual(payload["source_kinds"], ["codex", "zcode"])
+            con.close()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -141,6 +141,7 @@ def evidence_for(decision: dict[str, Any], events: list[dict[str, Any]], session
             "fact": {key: payload[key] for key in
                      ("tool", "command", "path", "filePath", "file_path", "status", "content", "sha", "subject")
                      if key in payload and payload[key] not in (None, "", [])},
+            "payload": payload,
         })
         if len(picked) >= 3:
             break
@@ -177,13 +178,15 @@ def fact_decisions(events: list[dict[str, Any]], *, id_prefix: str = "fact:",
                 "confidence": 1.0, "source_kind": event.get("source_kind"),
                 "raw_ref": event.get("raw_ref"), "event_type": event.get("event_type"),
                 "fact": event.get("payload") or {},
+                "payload": event.get("payload") or {},
             }],
             "evidence_count": 1,
         })
     return result
 
 
-def small_events(events: list[dict[str, Any]], linked_event_ids: set[str], limit: int = 18) -> list[dict[str, Any]]:
+def small_events(events: list[dict[str, Any]], linked_event_ids: set[str],
+                 decisions: list[dict[str, Any]] | None = None, limit: int = 18) -> list[dict[str, Any]]:
     """Return a restrained factual supplement around semantic decision bones."""
     priority = {
         "memory_break": 10, "error": 9, "git_commit": 8, "subagent_event": 7,
@@ -216,6 +219,42 @@ def small_events(events: list[dict[str, Any]], linked_event_ids: set[str], limit
         if source_events:
             source_seed.append(source_events[0])
     candidates = source_seed + [event for event in candidates if event not in source_seed]
+    decisions = decisions or []
+
+    def attribution(event: dict[str, Any]) -> tuple[str | None, float, list[str]]:
+        if not decisions:
+            return None, 0.0, []
+        event_text = " ".join(str(event.get(key) or "") for key in ("summary", "evidence_text"))
+        event_tokens = tokens(event_text)
+        best: tuple[float, str | None, list[str]] = (0.0, None, [])
+        for decision in decisions:
+            refs = decision.get("evidence_refs") or []
+            ref_sessions = {ref.get("session_id") for ref in refs if ref.get("session_id")}
+            ref_sources = {ref.get("source_kind") for ref in refs if ref.get("source_kind")}
+            source_text = " ".join(str(decision.get(key) or "") for key in ("title", "what", "why", "evidence"))
+            overlap = len(event_tokens & tokens(source_text))
+            same_session = bool(event.get("session_id") and event.get("session_id") in ref_sessions)
+            same_source = bool(event.get("source_kind") and event.get("source_kind") in ref_sources)
+            when = decision.get("when_ms") or parse_time(decision.get("when"))
+            distance = abs((event.get("occurred_at") or 0) - (when or 0)) if when else 10**18
+            near = distance <= 6 * 3600 * 1000
+            score = min(1.0, (0.42 if same_session else 0.0) +
+                        (0.18 if same_source else 0.0) +
+                        min(0.25, overlap * 0.08) +
+                        (0.15 if near else 0.0))
+            reasons = []
+            if same_session:
+                reasons.append("同一会话")
+            if same_source:
+                reasons.append("同一来源")
+            if overlap:
+                reasons.append("文本相关")
+            if near:
+                reasons.append("时间接近")
+            if score > best[0]:
+                best = (score, decision.get("id"), reasons)
+        return best[1], round(best[0], 2), best[2]
+
     picked: list[dict[str, Any]] = []
     seen: set[tuple[str, str, str]] = set()
     for event in candidates:
@@ -226,6 +265,8 @@ def small_events(events: list[dict[str, Any]], linked_event_ids: set[str], limit
         if key in seen:
             continue
         seen.add(key)
+        anchor_id, attribution_score, attribution_reasons = attribution(event)
+        relation = "关联上下文" if attribution_score >= 0.55 else "附近事实"
         picked.append({
             "id": f"small:{event.get('event_id')}",
             "when": fmt_ms(event.get("occurred_at"), "%Y-%m-%d %H:%M"),
@@ -234,9 +275,13 @@ def small_events(events: list[dict[str, Any]], linked_event_ids: set[str], limit
             "track": "补充",
             "status": "fact",
             "what": summary,
-            "why": "来自统一事实层；作为项目转折的上下文补充",
+            "why": "来自统一事实层；%s%s" % (relation, (" · " + "、".join(attribution_reasons)) if attribution_reasons else ""),
             "evidence": event.get("evidence_text") or summary,
             "small": True,
+            "anchor_id": anchor_id,
+            "attribution_score": attribution_score,
+            "attribution_reasons": attribution_reasons,
+            "attribution_label": relation,
             "event_type": event.get("event_type"),
             "evidence_refs": [{
                 "event_id": event.get("event_id"), "session_id": event.get("session_id"),
@@ -246,6 +291,7 @@ def small_events(events: list[dict[str, Any]], linked_event_ids: set[str], limit
                 "confidence": 1.0, "source_kind": event.get("source_kind"),
                 "raw_ref": event.get("raw_ref"), "event_type": event.get("event_type"),
                 "fact": event.get("payload") or {},
+                "payload": event.get("payload") or {},
             }],
             "evidence_count": 1,
         })
@@ -307,7 +353,6 @@ def build_view(store_path: str, timeline_path: str | None = None, out_path: str 
         for ref in (decision.get("evidence_refs") or [])
         if ref.get("event_id")
     }
-    supplement = small_events(events, linked_event_ids)
 
     by_type = Counter(event["event_type"] for event in events)
     times = [e["occurred_at"] for e in events if e.get("occurred_at")]
@@ -337,6 +382,8 @@ def build_view(store_path: str, timeline_path: str | None = None, out_path: str 
             item["evidence_refs"] = evidence_for(item, events, session_map)
         item["evidence_count"] = len(item["evidence_refs"])
         decisions.append(item)
+
+    supplement = small_events(events, linked_event_ids, decisions)
 
     linked_decisions = sum(1 for item in decisions if item.get("evidence_count"))
     evidence_coverage = round(linked_decisions / len(decisions), 3) if decisions else 0

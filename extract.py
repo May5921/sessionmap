@@ -12,6 +12,7 @@ sessionmap extract - 用本机已安装的 agent CLI 把时间线提炼成决策
     python extract.py timeline.md --dry-run > prompt.txt     # 只看 prompt, 不调模型
 """
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -135,6 +136,140 @@ def build_incremental_prompt(previous: dict, plan: dict) -> str:
     return INCREMENTAL_PROMPT.replace(
         "{previous}", json.dumps(previous_context, ensure_ascii=False, indent=2)
     ).replace("{plan}", json.dumps(plan, ensure_ascii=False, indent=2))
+
+
+def split_timeline(timeline: str, chunk_chars: int = 12000) -> list[str]:
+    """Split a markdown timeline at date/session boundaries.
+
+    The splitter keeps every source line exactly once.  A long date section is
+    split at session headings first and then at line boundaries, so a chunk
+    never silently drops the tail of a session.
+    """
+    if chunk_chars < 32:
+        raise ValueError("chunk_chars 必须至少为 32")
+    text = str(timeline or "")
+    if len(text) <= chunk_chars:
+        return [text]
+    heading = re.compile(r"(?m)^##\s+\d{4}-\d{2}-\d{2}.*$")
+    matches = list(heading.finditer(text))
+    if not matches:
+        return _split_lines(text, chunk_chars)
+    preamble = text[:matches[0].start()]
+    sections = []
+    for index, match in enumerate(matches):
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        sections.append(text[match.start():end])
+    chunks: list[str] = []
+    current = preamble
+    for section in sections:
+        pieces = _split_lines(section, chunk_chars) if len(section) > chunk_chars else [section]
+        for piece in pieces:
+            if current and len(current) + len(piece) > chunk_chars:
+                chunks.append(current)
+                current = ""
+            current += piece
+    if current:
+        chunks.append(current)
+    return [chunk for chunk in chunks if chunk.strip()]
+
+
+def _split_lines(text: str, chunk_chars: int) -> list[str]:
+    pieces: list[str] = []
+    current: list[str] = []
+    used = 0
+    for line in str(text).splitlines(keepends=True):
+        if current and used + len(line) > chunk_chars:
+            pieces.append("".join(current))
+            current, used = [], 0
+        current.append(line)
+        used += len(line)
+    if current:
+        pieces.append("".join(current))
+    return pieces
+
+
+def _decision_key(item: dict) -> tuple[str, str, str]:
+    title = " ".join(str(item.get("title") or item.get("what") or "").lower().split())
+    track = " ".join(str(item.get("track") or "").lower().split())
+    day = str(item.get("when") or "")[:10]
+    return title, track, day
+
+
+def merge_chunk_results(results: list[dict], max_decisions: int = 12) -> dict:
+    """Merge independent chunk outputs without claiming cross-chunk certainty."""
+    if not results:
+        raise ValueError("没有可合并的分片结果")
+    decisions: list[dict] = []
+    seen: dict[tuple[str, str, str], dict] = {}
+    for chunk_index, result in enumerate(results):
+        if not isinstance(result, dict) or not isinstance(result.get("decisions"), list):
+            raise ValueError(f"第 {chunk_index + 1} 个分片缺少 decisions 数组")
+        for item in result["decisions"]:
+            if not isinstance(item, dict):
+                continue
+            candidate = json.loads(json.dumps(item, ensure_ascii=False))
+            candidate["chunk_index"] = chunk_index
+            candidate["chunk_id"] = item.get("id")
+            key = _decision_key(candidate)
+            if not key[0]:
+                continue
+            old = seen.get(key)
+            if old is None or len(str(candidate.get("evidence") or "")) > len(str(old.get("evidence") or "")):
+                seen[key] = candidate
+    decisions = sorted(seen.values(), key=lambda item: (str(item.get("when") or ""), str(item.get("title") or "")))
+    if len(decisions) > max_decisions:
+        # Keep date coverage first, then retain the most evidenced nodes.
+        by_day: dict[str, dict] = {}
+        for item in decisions:
+            by_day.setdefault(str(item.get("when") or "")[:10], item)
+        selected = list(by_day.values())
+        remaining = [item for item in decisions if item not in selected]
+        remaining.sort(key=lambda item: -len(str(item.get("evidence") or "")))
+        decisions = sorted((selected + remaining)[:max_decisions],
+                           key=lambda item: (str(item.get("when") or ""), str(item.get("title") or "")))
+    for index, item in enumerate(decisions, 1):
+        item["id"] = f"D{index}"
+    recurring: list[str] = []
+    unfinished: list[str] = []
+    lost = None
+    for result in results:
+        for value in result.get("recurring") or []:
+            if value not in recurring and len(recurring) < 3:
+                recurring.append(value)
+        for value in result.get("unfinished") or []:
+            if value not in unfinished and len(unfinished) < 8:
+                unfinished.append(value)
+        if result.get("lost_after_compaction"):
+            lost = result["lost_after_compaction"]
+    merged = {
+        "headline": next((result.get("headline") for result in reversed(results) if result.get("headline")), None),
+        "decisions": decisions,
+        "recurring": recurring,
+        "unfinished": unfinished,
+        "lost_after_compaction": lost,
+        "chunked": {"mode": "chunked", "chunks": len(results), "decisions": len(decisions),
+                    "model_called": True, "deduped": sum(len(result.get("decisions") or []) for result in results) - len(decisions)},
+    }
+    return merged
+
+
+def run_chunked(timeline: str, cli: str | None, timeout: int,
+                no_proxy: bool = False, chunk_chars: int = 12000) -> tuple[dict, dict]:
+    chunks = split_timeline(timeline, chunk_chars)
+    results: list[dict] = []
+    for index, chunk in enumerate(chunks, 1):
+        prompt = PROMPT.replace("{timeline}", chunk)
+        name = detect_cli(cli)
+        print("[info] 分片语义 %d/%d: %s (%d 字符输入)" % (index, len(chunks), name, len(prompt)), file=sys.stderr)
+        out, _err = run_cli(name, prompt, timeout, no_proxy=no_proxy)
+        data = parse_json(out)
+        if data is None:
+            raise ValueError(f"第 {index} 个语义分片无法解析 JSON")
+        results.append(data)
+    merged = merge_chunk_results(results)
+    merged["chunked"]["input_chars"] = len(timeline)
+    merged["chunked"]["input_sha256"] = hashlib.sha256(timeline.encode("utf-8")).hexdigest()
+    return merged, merged["chunked"]
 
 
 def merge_incremental_result(previous: dict, patch: dict, plan: dict) -> dict:
@@ -278,6 +413,10 @@ def main():
     ap.add_argument("--timeout", type=int, default=300)
     ap.add_argument("--no-proxy", action="store_true",
                     help="只对本次本机 CLI 调用移除代理环境变量，不修改系统配置")
+    ap.add_argument("--chunked", action="store_true",
+                    help="按日期/会话边界分片提炼长时间线并合并结果")
+    ap.add_argument("--chunk-chars", type=int, default=12000,
+                    help="分片字符上限，默认 12000")
     ap.add_argument("--dry-run", action="store_true", help="只打印 prompt")
     ap.add_argument("--incremental-from", default=None,
                     help="上一轮完整 timeline.json；需配合 --incremental-plan")
@@ -287,6 +426,8 @@ def main():
 
     if bool(a.incremental_from) != bool(a.incremental_plan):
         ap.error("--incremental-from 与 --incremental-plan 必须同时提供")
+    if a.chunked and a.incremental_from:
+        ap.error("--chunked 不能和增量语义参数同时使用")
     if a.incremental_from and a.dry_run:
         ap.error("增量语义不支持 --dry-run，请直接查看 semantic-incremental-plan.json")
 
@@ -303,6 +444,16 @@ def main():
 
     with open(a.timeline, encoding="utf-8") as f:
         timeline = f.read()
+    if a.chunked:
+        try:
+            data, meta = run_chunked(timeline, a.cli, a.timeout, a.no_proxy, a.chunk_chars)
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            sys.exit(str(exc))
+        dest = a.out or (os.path.splitext(a.timeline)[0] + ".json")
+        Path(dest).write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        print("[ok] 分片语义 %s -> %d 个决策 -> %s" %
+              (meta.get("chunks"), len(data.get("decisions", [])), dest), file=sys.stderr)
+        return
     if len(timeline) > a.max_chars:
         print("[warn] 时间线 %d 字符, 截断到 %d" % (len(timeline), a.max_chars), file=sys.stderr)
         timeline = timeline[:a.max_chars]

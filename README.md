@@ -36,6 +36,10 @@ extraction through the local CLI.
 
 如果本机代理环境不被 CLI 接受，可加 `--no-proxy`；它只影响本次子进程，不修改系统配置。
 
+超长时间线可以使用 `extract.py --chunked --chunk-chars 12000` 按日期/会话边界分片提炼，再合并决策；任何分片失败都会明确失败，不会生成半截语义结果。
+
+分片结果会保存完整输入的 SHA-256、分片编号和原始决策 ID，便于核对每个判断来自哪一段事实。完整长时间线仍可能受本机 CLI 的上下文和网络配置限制；遇到超时应使用较小分片或增量提炼。
+
 For an existing semantic baseline, add `--incremental` to send only the
 changed evidence and affected decision context to the local CLI. A matched
 refresh reuses the previous result without a model call; a missing baseline
@@ -77,7 +81,7 @@ python adapter_pipeline.py pi --workspace pi-mini --store sessionmap-pi.db --out
 python adapter_pipeline.py dsh --workspace pi-mini --store sessionmap-dsh.db --out dsh-report.html
 ```
 
-同一个仓库由多个 Agent 工具共同维护时，先把各来源的本地 canonical store 合并到一个工作区：
+`pipeline.py` 和 `watch.py` 默认会发现同一仓库根目录下的多个 canonical store 并自动合并；需要单源调试时加 `--no-merge`。也可以手动合并：
 
 ```powershell
 python workspace_merge.py sessionmap.db sessionmap-codex.db sessionmap-pi.db sessionmap-dsh.db `
@@ -86,7 +90,7 @@ python workspace_merge.py sessionmap.db sessionmap-codex.db sessionmap-pi.db ses
 
 合并层保留来源、会话和原始引用；它不会修改任何源库。
 
-事件线默认把语义决策作为主骨，再补充最多 18 条未被决策引用的高信号事实（用户消息、Todo、错误、Git、子 Agent 和记忆断裂）。补充事件使用低对比样式，可以一键隐藏。
+事件线默认把语义决策作为主骨，再补充最多 18 条未被决策引用的高信号事实（用户消息、Todo、错误、Git、子 Agent 和记忆断裂）。每条补充事实会按会话、来源、文本相关性和时间距离归属到最近的主事件，并保留关联分数与理由；页面把它嵌在对应主事件下面，可以一键隐藏。点击证据后可继续打开同目录的 `evidence.html`，查看原始引用和完整事实载荷。
 
 项目快照和人工修正也保持在本地事实链上：
 

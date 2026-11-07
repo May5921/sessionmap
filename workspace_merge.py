@@ -29,6 +29,27 @@ def merged_workspace_id(root: str) -> str:
     return "workspace:" + hashlib.sha1(normalize_root(root).encode("utf-8")).hexdigest()[:16]
 
 
+def resolve_root_hint(workspace: str | Path) -> str:
+    """Resolve a friendly workspace name to a likely local repository root."""
+    candidate = Path(str(workspace)).expanduser()
+    if candidate.exists():
+        return normalize_root(candidate.resolve())
+    for base in (Path.home() / "projects", Path.home() / "Documents"):
+        candidate = base / str(workspace)
+        if candidate.exists():
+            return normalize_root(candidate.resolve())
+    return normalize_root(str(workspace))
+
+
+def discover_source_stores(primary: str | Path, search_dir: str | Path | None = None) -> list[Path]:
+    """Find sibling canonical stores without including generated output DBs."""
+    primary_path = Path(primary).resolve()
+    directory = Path(search_dir or primary_path.parent).resolve()
+    names = ("sessionmap-codex.db", "sessionmap-claude.db", "sessionmap-pi.db",
+             "sessionmap-dsh.db", "sessionmap-opencode.db")
+    return [primary_path, *[directory / name for name in names if (directory / name).exists()]]
+
+
 def workspace_root(row: sqlite3.Row) -> str:
     """Resolve the actual repository root represented by a workspace row.
 
@@ -76,6 +97,24 @@ def _load_latest_runs(con: sqlite3.Connection, workspace_id: str) -> sqlite3.Row
         "SELECT * FROM analysis_run WHERE workspace_id=? AND status='succeeded' "
         "ORDER BY completed_at DESC, run_id DESC LIMIT 1", (workspace_id,)
     ).fetchone()
+
+
+def _event_dedupe_key(row: sqlite3.Row, payload: dict[str, Any]) -> str | None:
+    """Return a cross-agent dedupe key for facts safe to collapse."""
+    event_type = str(row["event_type"] or "")
+    if event_type == "git_commit":
+        sha = payload.get("sha") or row["source_id"]
+        return f"git_commit:{sha}" if sha else None
+    if event_type in {"memory_break", "error", "todo_change", "subagent_event"}:
+        stable = {
+            "event_type": event_type,
+            "occurred_at": row["occurred_at"],
+            "summary": row["summary"],
+            "payload": payload,
+        }
+        return "fact:" + hashlib.sha256(json.dumps(stable, ensure_ascii=False,
+                                                       sort_keys=True, default=str).encode()).hexdigest()
+    return None
 
 
 def merge_stores(input_paths: Iterable[str | Path], output_path: str | Path,
@@ -141,6 +180,7 @@ def merge_stores(input_paths: Iterable[str | Path], output_path: str | Path,
 
             session_maps: dict[tuple[str, str], str] = {}
             event_maps: dict[tuple[str, str], str] = {}
+            deduped_events: dict[str, dict[str, Any]] = {}
             decision_sources: list[tuple[sqlite3.Connection, sqlite3.Row, sqlite3.Row]] = []
             session_count = event_count = 0
             for con, workspace in matching:
@@ -167,6 +207,18 @@ def merge_stores(input_paths: Iterable[str | Path], output_path: str | Path,
                     new_event_id = f"{source_kind}:{raw_event_id}"
                     event_maps[(source_kind, raw_event_id)] = new_event_id
                     payload = _json(row["payload_json"], {})
+                    dedupe_key = _event_dedupe_key(row, payload)
+                    if dedupe_key and dedupe_key in deduped_events:
+                        existing = deduped_events[dedupe_key]
+                        event_maps[(source_kind, raw_event_id)] = existing["event_id"]
+                        existing["source_kinds"].add(source_kind)
+                        existing["source_ids"].add(str(row["source_id"]))
+                        merged_payload = _json(existing["payload_json"], {})
+                        merged_payload["source_kinds"] = sorted(existing["source_kinds"])
+                        merged_payload["source_ids"] = sorted(existing["source_ids"])
+                        store.execute("UPDATE event SET payload_json=? WHERE event_id=?",
+                                      (json.dumps(merged_payload, ensure_ascii=False), existing["event_id"]))
+                        continue
                     fp = event_fingerprint(
                         workspace_id=workspace_id, event_id=new_event_id,
                         event_type=row["event_type"], actor=row["actor"], occurred_at=row["occurred_at"],
@@ -183,6 +235,13 @@ def merge_stores(input_paths: Iterable[str | Path], output_path: str | Path,
                          row["actor"], row["occurred_at"], row["summary"], json.dumps(payload, ensure_ascii=False),
                          row["evidence_text"], row["raw_ref"], fp, stamp),
                     )
+                    if dedupe_key:
+                        deduped_events[dedupe_key] = {
+                            "event_id": new_event_id,
+                            "payload_json": json.dumps(payload, ensure_ascii=False),
+                            "source_kinds": {source_kind},
+                            "source_ids": {str(row["source_id"])},
+                        }
                     event_count += 1
 
                 repo = con.execute("SELECT * FROM repository_snapshot WHERE workspace_id=?", (source_id,)).fetchone()
