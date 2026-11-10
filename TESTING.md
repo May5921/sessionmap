@@ -7,6 +7,7 @@
 ```powershell
 python sync.py pi-mini --out sessionmap.db
 python view.py sessionmap.db timeline.json --out project-view.json
+python progress.py sessionmap.db --out progress.json
 python semantic.py sessionmap.db timeline.json --view project-view.json
 python semantic.py sessionmap.db timeline.json --plan --plan-out semantic-incremental-plan.json
 python extract.py timeline.md --incremental-from timeline.json --incremental-plan semantic-incremental-plan.json --out timeline.json
@@ -32,7 +33,9 @@ Claude 的原始 `type` 会统一映射为 canonical event type，并在 payload
 - HTML 中事件和断裂标记的数量是否正确。
 - 语义层是否按输入哈希幂等写入分析运行、决策和证据链接。
 
-当前自动化单元测试为 **40 passed**，覆盖六种适配器的统一事件契约、幂等导入、内容指纹变化、部分导入告警、跨来源工作区合并与去重、合并语义备注保留、canonical timeline、facts-only fallback、子会话高信号文本提取、语义节点 manifest、增量语义计划与合并、分片语义切分与合并、超限输入拒绝、小事件归属与嵌入、未归属事实展示、证据深链、快照对比、矛盾检查、人工修正、搜索、脱敏导出、待提炼事实和首屏事件线状态。
+当前自动化单元测试为 **44 passed**，覆盖六种适配器的统一事件契约、幂等导入、内容指纹变化、部分导入告警、跨来源工作区合并与去重、合并语义备注保留、canonical timeline、facts-only fallback、子会话高信号文本提取、语义节点 manifest、增量语义计划与合并、分片语义切分与合并、超限输入拒绝、小事件归属与嵌入、未归属事实展示、证据深链、快照对比、矛盾检查、人工修正、搜索、脱敏导出、待提炼事实、首屏事件线状态，以及 `progress.py` 的确定性工作项/里程碑/阶段/信心度投影。
+
+`progress.py` 只读 canonical 事实，不调用模型：主会话（含后代）聚成工作项，git 发布提交成为里程碑，TODO 状态机与会话结果推导状态，文件重叠/提交链接/会话广度/来源广度/时间跨度合成信心度。事件线渲染时以工作项和里程碑为骨架，语义决策降为注解，小事件默认隐藏。
 
 自动合并 smoke 会在同一仓库根目录下发现 ZCode、Claude、Codex、Pi、DSH 和 OpenCode 的 canonical store，输出 `sessionmap-merged.db`、`merged-project-view.json`、`merged-canonical-timeline.json`、`report.html` 和 `evidence.html`。合并只读源库，并按 Git commit SHA 等稳定事实去重；跨工具相同事实会保留来源列表。
 

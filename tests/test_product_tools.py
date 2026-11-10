@@ -20,17 +20,18 @@ from eventline_dashboard import render
 
 
 class ProductToolTests(unittest.TestCase):
-    def test_eventline_first_view_is_quiet_and_incremental_badge_is_muted(self):
+    def test_eventline_renders_spine_and_hides_small_by_default(self):
         template = (ROOT / "eventline_dashboard.py").read_text(encoding="utf-8")
-        self.assertIn("const fresh=new Set(previous?items.filter", template)
-        self.assertIn(".recent{color:var(--muted)", template)
-        self.assertNotIn(".event.new .copy{border-left:2px solid var(--rust)", template)
-        self.assertIn('id="sourceFilter"', template)
-        self.assertIn('id="toolFilter"', template)
-        self.assertIn('id="stageToggle"', template)
+        self.assertIn("function buildRows()", template)
+        self.assertIn("let smallOn=false", template)
+        self.assertIn("workItems().map", template)
+        self.assertIn("milestones().map", template)
+        self.assertIn("data-type=\"${esc(type)}\"", template)
         self.assertIn('class="ev-ref"', template)
-        self.assertIn('curatedExtras=allExtras.filter', template)
-        self.assertIn('attribution_score||0)>=0.55', template)
+        # The first view stays quiet: no NEW badge, no source/tool filter clutter.
+        self.assertNotIn("const fresh=new Set", template)
+        self.assertNotIn('id="sourceFilter"', template)
+        self.assertNotIn('id="toolFilter"', template)
 
     def test_compare_reports_decision_fact_and_git_changes(self):
         before = {"workspace": {"id": "w"}, "generated_at": 1,

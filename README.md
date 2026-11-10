@@ -65,10 +65,12 @@ The current story is generated from local records. It does not claim that a vira
 ## 数据流
 
 ```text
-source adapter → canonical events → semantic decisions/evidence → canonical timeline → event line
+source adapter → canonical events → progress spine → semantic decisions/evidence → canonical timeline → event line
 ```
 
-`canonical_timeline.py` 是工具无关的展示投影。它优先读取 `sessionmap.db` 里的最新语义运行，只有在语义层尚未建立时才兼容读取 `timeline.json`。这让不同工具可以共享同一条事实、语义和证据链。
+`progress.py` 是确定性的项目推进骨架：工作项来自主会话边界与文件重叠，里程碑来自 git 发布提交，状态来自 TODO 状态机和会话结果。它只读事实、不调用模型，所以快、可复现、可回退。`canonical_timeline.py` 是工具无关的展示投影，优先读取 `sessionmap.db` 里的最新语义运行，只有在语义层尚未建立时才兼容读取 `timeline.json`。
+
+事件线以工作项和里程碑为骨架，语义决策降为注解；低信心不等于事实，未收口事项和记忆断裂留在骨架上。
 
 语义层还会为每次运行保存事实指纹快照和决策节点 manifest。下一次刷新时，`semantic.py --plan` 会把新增、删除或指纹变化的事件映射回上一轮的证据决策，并输出受影响范围；节点 manifest 会标记 `reuse`、`refresh` 或 `removed`。`pipeline.py --extract --incremental` 使用这个只读计划，只把变化事实交给本机 CLI，再把返回的决策 patch 合并回旧结果；matched 时不调用模型。没有历史快照时会明确标记为 `unavailable`，并回退到完整提炼，不会假装完成增量判断。
 

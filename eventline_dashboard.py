@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Render the minimal chronological event line."""
+"""Render the project-progress timeline.
+
+The spine is deterministic: work items (session efforts) and milestones (git
+releases) are the primary structure.  Semantic decisions, commits and memory
+breaks are annotations around it.  Visual style is deliberately restrained --
+one accent colour, almost no tags, no "NEW" noise.
+"""
 from __future__ import annotations
 
 import argparse
@@ -14,20 +20,225 @@ def esc(value: object) -> str:
 
 
 TEMPLATE = r'''<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="data:,"><title>__TITLE__ · sessionmap</title><style>
-:root{--paper:#f5f5f7;--ink:#1d1d1f;--muted:#6e6e73;--line:#d2d2d7;--strong:#a1a1a6;--rust:#ff3b30;color-scheme:light}
-*{box-sizing:border-box}html{background:var(--paper)}body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased}button{font:inherit;cursor:pointer}button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--rust);outline-offset:2px}.mono,.eyebrow,.meta,.when,.tag,.drawer-meta{font-family:"Cascadia Mono","SFMono-Regular",Consolas,monospace}.page{max-width:930px;margin:0 auto;padding:62px 34px 90px}.head{display:flex;justify-content:space-between;align-items:start;gap:20px}.eyebrow{font-size:10px;color:var(--muted);letter-spacing:.15em}.head h1{max-width:820px;margin:15px 0 7px;font-size:clamp(31px,4.4vw,55px);font-weight:500;line-height:1.08;letter-spacing:-.055em}.meta{color:var(--muted);font-size:10px}.head button{border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.72);color:var(--ink);padding:7px 12px;font-size:11px;box-shadow:0 1px 2px rgba(0,0,0,.04);white-space:nowrap;flex-shrink:0}.head button:hover{background:#fff;border-color:var(--strong)}.story{max-width:700px;margin:29px 0 0;padding-left:15px;border-left:2px solid var(--rust);font-size:15px;line-height:1.7}.story strong{font-weight:500}.story small{display:block;margin-top:5px;color:var(--muted);font-size:11px}.line-head{display:flex;justify-content:space-between;align-items:baseline;margin-top:47px;margin-bottom:11px}.line-head h2{margin:0;font-size:17px;font-weight:500;letter-spacing:-.02em}.line-head span{color:var(--muted);font-size:11px}.line-head button{border:0;border-bottom:1px solid var(--strong);padding:0;background:transparent;color:var(--ink);font-size:11px}.filters{display:none;margin:12px 0 0;padding:12px 0;border-top:1px solid var(--line);gap:12px;align-items:center;flex-wrap:wrap;font-size:11px}.filters.open{display:flex}.filters label{display:flex;align-items:center;gap:6px}.filters select,.filters input{border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);padding:6px 8px;font:inherit}.filters input{min-width:220px}.filters button{border:0;border-bottom:1px solid var(--strong);padding:0;background:transparent;color:var(--ink);font-size:11px}.timeline{position:relative;border-top:1px solid var(--strong);border-bottom:1px solid var(--strong)}.timeline.overview .meaning,.timeline.overview .ev-count{display:none}.timeline.overview .event{min-height:63px}.timeline.overview .copy{padding-top:11px;padding-bottom:10px}.event.new .recent{color:var(--muted)}.recent{color:var(--muted);font:10px "Cascadia Mono",monospace}.delta{margin-top:11px;color:var(--muted);font-size:11px}.delta strong{color:var(--ink);font-weight:500}.timeline:before{content:"";position:absolute;top:0;bottom:0;left:122px;width:1px;background:var(--strong)}.event{position:relative;display:grid;grid-template-columns:97px 50px minmax(0,1fr);min-height:82px;border-bottom:1px solid var(--line);cursor:pointer;transition:background .15s ease}.event:last-child{border-bottom:0}.event:hover{background:rgba(255,255,255,.55)}.event:focus-visible{outline:2px solid var(--rust);outline-offset:-2px}.when{padding:16px 12px 0 0;text-align:right;color:var(--muted);font-size:10px;line-height:1.45}.mark{position:relative}.mark:before{content:"";position:absolute;z-index:1;top:31px;left:25px;width:9px;height:9px;border:1px solid var(--ink);background:var(--paper);border-radius:50%;transform:translate(-50%,-50%)}.event.done .mark:before{background:var(--ink)}.event.abandoned .mark:before{background:var(--rust);border-color:var(--rust);border-radius:0;transform:translate(-50%,-50%) rotate(45deg)}.event.current{background:rgba(174,74,52,.045)}.event.current .mark:before{width:13px;height:13px;border:2px solid var(--rust)}.copy{padding:13px 18px 14px 6px;min-width:0}.top{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}.title{font-size:15px;font-weight:600;line-height:1.4}.status{color:var(--muted);font-size:10px}.status.warn{color:var(--rust)}.tag{color:var(--muted);font-size:10px}.meaning{margin:4px 0 0;color:var(--muted);font-size:12px;line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ev-count{margin-top:5px;color:var(--muted);font-size:10px}.event.current .ev-count{color:var(--rust)}.event.small{min-height:52px;background:rgba(255,255,255,.28)}.event.small .mark:before{width:6px;height:6px;border-color:var(--strong)}.event.small .copy{padding-top:9px;padding-bottom:9px;padding-left:24px}.event.small.unanchored .copy{padding-left:6px}.event.small .title{font-size:12px;font-weight:500}.event.small .meaning{font-size:11px}.stage{position:relative;z-index:2;padding:10px 18px 8px 147px;background:var(--paper);border-top:1px solid var(--strong);color:var(--muted);font:10px "Cascadia Mono",monospace;letter-spacing:.08em;text-transform:uppercase}.cut{position:relative;z-index:2;display:grid;grid-template-columns:97px 50px minmax(0,1fr);min-height:50px;background:var(--paper);border-top:1px solid var(--rust);border-bottom:1px solid var(--rust);color:var(--rust)}.cut .when{color:var(--rust);padding-top:12px}.cut .mark:before{top:24px;width:7px;height:7px;background:var(--rust);border-color:var(--rust);border-radius:0;transform:translate(-50%,-50%) rotate(45deg)}.cut .copy{padding-top:10px;font-size:11px}.cut strong{font:11px "Cascadia Mono",monospace;font-weight:500}.caption{display:flex;justify-content:space-between;gap:15px;margin-top:12px;color:var(--muted);font-size:11px}.caption .warn{color:var(--rust)}.tail{display:flex;justify-content:space-between;gap:18px;margin-top:19px;color:var(--muted);font-size:11px}.tail strong{color:var(--ink);font-weight:500}.tail button{border:0;border-bottom:1px solid var(--strong);padding:0;background:transparent;color:var(--ink);font-size:11px}.details{display:none;margin-top:12px;padding:12px 0;border-top:1px solid var(--line);color:var(--muted);font-size:12px}.details.open{display:block}.details p{margin:4px 0}.details p:before{content:"·";margin-right:8px;color:var(--rust)}footer{margin-top:51px;color:var(--muted);font-size:10px}.backdrop{position:fixed;inset:0;z-index:5;display:none;background:rgba(32,33,29,.16)}.backdrop.open{display:block}.drawer{position:fixed;z-index:6;top:0;right:0;bottom:0;width:min(430px,94vw);padding:30px 29px 42px;overflow:auto;background:rgba(245,245,247,.95);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);box-shadow:-18px 0 50px rgba(0,0,0,.12);transform:translateX(104%);transition:transform .22s cubic-bezier(.22,.61,.36,1)}.drawer.open{transform:translateX(0)}.drawer-close{float:right;border:0;background:transparent;color:var(--muted);font-size:20px}.drawer h2{margin:35px 0 5px;font-size:25px;line-height:1.2;font-weight:500;letter-spacing:-.04em}.drawer-meta{color:var(--muted);font-size:10px}.drawer-section{margin-top:25px;padding-top:11px;border-top:1px solid var(--strong)}.drawer-section h3{margin:0 0 7px;color:var(--muted);font:10px "Cascadia Mono",monospace;letter-spacing:.08em;text-transform:uppercase}.drawer-section p{margin:0;font-size:13px;line-height:1.7}.evidence-note{margin:0 0 7px;color:var(--muted);font-size:11px;line-height:1.5}.evidence{margin:0;padding:0;list-style:none}.evidence li{padding:10px 0;border-bottom:1px solid var(--line)}.evidence .ev-meta{color:var(--muted);font:10px "Cascadia Mono",monospace}.evidence .ev-fact{margin-top:3px;color:var(--muted);font-size:10px}.evidence .ev-ref{margin-top:3px;color:var(--muted);font:10px "Cascadia Mono",monospace;overflow-wrap:anywhere}.evidence blockquote{margin:4px 0 0;font-size:12px;line-height:1.65}@media(prefers-reduced-motion:reduce){.drawer{transition:none}}@media(max-width:640px){.page{padding:40px 17px 70px}.head{display:block}.head button{margin-top:17px}.story{margin-top:25px}.timeline:before{left:82px}.event,.cut{grid-template-columns:62px 40px minmax(0,1fr)}.when{padding-right:8px}.mark:before,.cut .mark:before{left:20px}.copy{padding-left:4px}.meaning{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}.caption{display:block}.caption span{display:block;margin-top:5px}}
-@media(max-width:640px){.line-head{flex-wrap:wrap;gap:9px 14px}.line-head h2{width:100%}.story{font-size:14px}.line-head span{order:5;width:100%}.line-head button{min-height:28px}}
-::selection{background:rgba(255,59,48,.18)}::-webkit-scrollbar{width:10px}::-webkit-scrollbar-thumb{background:#c7c7cc;border:3px solid var(--paper);border-radius:10px}</style></head><body><main class="page"><header class="head"><div><div class="eyebrow">PROJECT MEMORY / __SOURCE__</div><h1 id="headline"></h1><div class="meta" id="period"></div></div><button id="refresh">刷新</button></header><div class="story" id="story"></div><div class="delta" id="delta"></div><div class="line-head"><h2>事件线</h2><span>时间向下 · 点击事件查看证据</span><button id="filterButton">筛选</button><button id="density">展开细节</button><button id="stageToggle">按阶段</button><button id="smallToggle">补充事件</button></div><div class="filters" id="filters"><label>工作线<select id="trackFilter"><option value="">全部</option></select></label><label>来源<select id="sourceFilter"><option value="">全部</option></select></label><label>工具<select id="toolFilter"><option value="">全部</option></select></label><label>搜索<input id="searchInput" type="search" placeholder="事件、原因、证据"></label><button id="clearFilter">清除</button></div><div class="timeline overview" id="timeline"></div><div class="caption"><span>节点是项目转折，不是每一条消息。</span><span class="warn" id="breakCaption"></span></div><div class="tail"><span id="tail"></span><button id="toggle">查看未收口事项</button></div><div class="details" id="details"></div><footer id="footer"></footer></main><div class="backdrop" id="backdrop"></div><aside class="drawer" id="drawer"><button class="drawer-close" id="drawerX">×</button><div class="eyebrow">EVENT / EVIDENCE</div><h2 id="drawerTitle"></h2><div class="drawer-meta" id="drawerMeta"></div><div class="drawer-section"><h3>发生了什么</h3><p id="drawerWhat"></p></div><div class="drawer-section"><h3>为什么</h3><p id="drawerWhy"></p></div><div class="drawer-section"><h3>证据</h3><p class="evidence-note">匹配度是来源、时间和文本的匹配分，不代表事实真值。</p><ul class="evidence" id="drawerEvidence"></ul></div><div class="drawer-section"><h3>Git 事实</h3><p id="drawerGit"></p></div></aside><script>
-const DATA=__DATA__;const $=s=>document.querySelector(s);const statusText={open:'进行中',done:'已落地',abandoned:'已放弃',fact:'事实'};function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function eventRow(d,n,current,isNew,isSmall,isUnanchored){const st=d.status==='abandoned'?'abandoned':d.status==='done'?'done':'open';const label=isSmall?(d.attribution_label||'补充'):d.track||'主干';return `<article class="event ${st}${isSmall?' small':''}${isUnanchored?' unanchored':''}${current?' current':''}${isNew?' new':''}" data-id="${esc(d.id)}" role="button" tabindex="0" aria-label="查看事件：${esc(d.title)}"><div class="when">${esc((d.when||'').slice(5,10))}<br>${esc((d.when||'').slice(11,16))}</div><div class="mark"></div><div class="copy"><div class="top"><span class="title">${esc(d.title)}</span><span class="status ${st==='abandoned'?'warn':''}">${esc(statusText[d.status]||d.status)}</span><span class="tag">${esc(label)}</span>${isSmall&&d.attribution_score!=null?`<span class="tag">${Math.round(Number(d.attribution_score)*100)}% 关联</span>`:''}${isNew?'<span class="recent">NEW</span>':''}</div><p class="meaning">${esc(d.what)}</p><div class="ev-count">${d.evidence_count||0} 条证据 · 点击展开</div></div></article>`}
-function stageRow(stage){return `<div class="stage">${esc(stage)}</div>`}function assignSmallEvents(anchors,extras){const groups=new Map(anchors.map(d=>[d.id,[]]));groups.set(null,[]);for(const extra of extras){if(extra.anchor_id&&groups.has(extra.anchor_id)){groups.get(extra.anchor_id).push(extra)}else{groups.get(null).push(extra)}}for(const group of groups.values())group.sort((a,b)=>(a.when_ms||0)-(b.when_ms||0));return groups}function cutRow(b){return `<div class="cut"><div class="when">${esc(b.when)}</div><div class="mark"></div><div class="copy"><strong>记忆断裂</strong> · 丢失 ${esc(b.loss_pct)}% · ${Number(b.pre_tokens||0).toLocaleString()} → ${Number(b.post_tokens||0).toLocaleString()} token</div></div>`}
-function render(){const s=DATA.stats;const ds=[...(DATA.decisions||[])].sort((a,b)=>(a.when_ms||0)-(b.when_ms||0));const smallKey=`sessionmap:small-events:${DATA.workspace?.id||'workspace'}`;const showSmall=localStorage.getItem(smallKey)!=='0';const allExtras=[...(DATA.small_events||[])];const curatedExtras=allExtras.filter(d=>d.anchor_id||Number(d.attribution_score||0)>=0.55||['memory_break','error','git_commit','todo_change'].includes(d.event_type)).slice(0,12);const hiddenExtras=Math.max(0,allExtras.length-curatedExtras.length);const extras=showSmall?curatedExtras:[];const items=[...ds,...extras].sort((a,b)=>(a.when_ms||0)-(b.when_ms||0));const smallByAnchor=assignSmallEvents(ds,extras);const last=ds.at(-1);const open=[...ds].reverse().find(d=>d.status==='open')||last;const maxLoss=Math.round(Math.max(...(DATA.breaks||[]).map(b=>Number(b.loss_pct)||0),0));$('#headline').textContent=(DATA.headline||'项目记忆');$('#period').textContent=`${DATA.workspace?.name||'工作区'} · ${s.first_when} → ${s.last_when} · ${s.sessions} 个会话`;const story=DATA.story||DATA.headline||'项目正在形成可回溯的工作记忆。';$('#story').innerHTML=`<strong>${esc(story)}</strong><small>现在走到：${esc(open?.title||'等待下一步')} · ${esc(open?.track||'主干')}</small>`;$('#breakCaption').textContent=`${s.memory_breaks} 次记忆断裂`;const viewKey=`sessionmap:last-view:${DATA.workspace?.id||'workspace'}`;const stageKey=`sessionmap:stage-mode:${DATA.workspace?.id||'workspace'}`;const stageMode=localStorage.getItem(stageKey)==='1';const previous=Number(localStorage.getItem(viewKey)||0);const fresh=new Set(previous?items.filter(d=>(d.when_ms||0)>previous).map(d=>d.id):[]);const changes=DATA.changes||[];const freshChanges=changes.filter(c=>(c.at||0)>previous);const countKind=kind=>freshChanges.filter(c=>c.kind===kind).length;const changeParts=[];if(countKind('decision')||countKind('decision_new'))changeParts.push(`${countKind('decision')+countKind('decision_new')} 个决策`);if(countKind('todo'))changeParts.push(`${countKind('todo')} 个待办变化`);if(countKind('status_reversal'))changeParts.push(`${countKind('status_reversal')} 次状态反转`);if(countKind('memory_break'))changeParts.push(`${countKind('memory_break')} 次记忆断裂`);if(countKind('git_commit'))changeParts.push(`${countKind('git_commit')} 个提交`);const cuts=[...(DATA.breaks||[])].sort((a,b)=>(a.at||0)-(b.at||0));const freshCuts=cuts.filter(b=>(b.at||0)>previous).length;$('#delta').innerHTML=previous?`<strong>自上次查看：</strong>${freshChanges.length?changeParts.join('、')||`${freshChanges.length} 项事实变化`:'没有新的项目变化'}`:'<strong>首次查看：</strong>已建立项目记忆基线';let rows=[];let ci=0;let activeStage='';const orphans=smallByAnchor.get(null)||[];let oi=0;const draw=(d,small,isUnanchored=false)=>{rows.push(eventRow(d,d.id===open?.id,d.id===last?.id,fresh.has(d.id),small,isUnanchored));};for(const d of ds){while(oi<orphans.length&&(orphans[oi].when_ms||0)<=(d.when_ms||0))draw(orphans[oi++],true,true);if(stageMode&&d.stage&&d.stage!==activeStage){rows.push(stageRow(d.stage));activeStage=d.stage;}while(ci<cuts.length&&(cuts[ci].at||0)<(d.when_ms||0)){rows.push(cutRow(cuts[ci++]));}draw(d,false);for(const extra of (smallByAnchor.get(d.id)||[]))draw(extra,true,false);}while(oi<orphans.length)draw(orphans[oi++],true,true);while(ci<cuts.length)rows.push(cutRow(cuts[ci++]));$('#timeline').innerHTML=rows.join('');const tracks=[...new Set(items.map(d=>d.track||'主干'))].sort();$('#trackFilter').innerHTML='<option value="">全部</option>'+tracks.map(track=>`<option value="${esc(track)}">${esc(track)}</option>`).join('');$('#stageToggle').style.display=ds.some(d=>d.stage)?'inline-block':'none';$('#stageToggle').textContent=stageMode?'收起阶段':'按阶段';$('#smallToggle').textContent=showSmall?'隐藏补充':'显示补充';const sources=[...new Set(items.flatMap(d=>(d.evidence_refs||[]).map(ref=>ref.source_kind).filter(Boolean)))].sort();$('#sourceFilter').innerHTML='<option value="">全部</option>'+sources.map(source=>`<option value="${esc(source)}">${esc(source)}</option>`).join('');const tools=[...new Set(items.flatMap(d=>(d.evidence_refs||[]).map(ref=>(ref.fact||{}).tool).filter(Boolean)))].sort();$('#toolFilter').innerHTML='<option value="">全部</option>'+tools.map(tool=>`<option value="${esc(tool)}">${esc(tool)}</option>`).join('');applyFilters();$('#tail').innerHTML=`<strong>当前枝头：</strong>${esc(open?.title||'—')} · ${DATA.unfinished?.length||0} 件事未收口`;$('#details').innerHTML=(DATA.unfinished||[]).map(x=>`<p>${esc(x.text)}</p>`).join('')||'<p>没有未完成事项。</p>';$('#footer').textContent=`sessionmap · 事实与证据可回溯 · ${new Date(DATA.generated_at).toLocaleString()}`;document.querySelectorAll('.event').forEach(n=>{const openEvent=()=>openDecision(n.dataset.id);n.addEventListener('click',openEvent);n.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();openEvent()}})});setTimeout(()=>localStorage.setItem(viewKey,String(s.last_at||Date.now())),2500)}
-function openDecision(id){const d=[...(DATA.decisions||[]),...(DATA.small_events||[])].find(x=>x.id===id);if(!d)return;$('#drawerTitle').textContent=d.title||d.id;$('#drawerMeta').textContent=`${d.when||'—'} · ${d.track||'其他'} · ${statusText[d.status]||d.status}`;$('#drawerWhat').textContent=d.what||'—';$('#drawerWhy').textContent=d.why||'—';const refs=d.evidence_refs||[];$('#drawerEvidence').innerHTML=refs.length?refs.map(e=>{const fact=e.fact||{};const factText=[e.source_kind,e.event_type,fact.tool||fact.command||fact.path||fact.filePath||fact.sha].filter(Boolean).join(' · ');const rawRef=e.raw_ref||'';return `<li><div class="ev-meta">${esc(e.when)} · ${esc(e.session_title)} · ${Math.round((e.confidence||0)*100)}% 匹配度</div>${factText?`<div class="ev-fact">${esc(factText)}</div>`:''}${rawRef?`<div class="ev-ref">来源：${esc(rawRef)}</div>`:''}<div class="ev-ref"><a href="evidence.html#event=${encodeURIComponent(e.event_id||d.id)}" target="_blank">打开本地原始记录</a></div><blockquote>“${esc(e.quote)}”</blockquote></li>`}).join(''):'<li>暂无匹配证据</li>';const repo=DATA.repository||{};const commits=repo.commits||[];const commitText=commits.slice(0,3).map(c=>`${String(c.sha||'').slice(0,8)} ${c.subject||''}`).join(' · ');$('#drawerGit').textContent=repo.branch?`${repo.branch} · ${String(repo.head_sha||'').slice(0,8)} · ${repo.changed_count||0} 个改动文件${commitText?' · 最近提交：'+commitText:''}`:'暂无 Git 快照';$('#drawer').classList.add('open');$('#backdrop').classList.add('open')}
-function applyFilters(){const q=($('#searchInput').value||'').trim().toLowerCase();const track=$('#trackFilter').value;const source=$('#sourceFilter').value;const tool=$('#toolFilter').value;document.querySelectorAll('.event').forEach(node=>{const d=[...(DATA.decisions||[]),...(DATA.small_events||[])].find(item=>item.id===node.dataset.id)||{};const refs=d.evidence_refs||[];const hay=[d.title,d.track,d.what,d.why,d.evidence,...refs.map(ref=>[ref.quote,ref.raw_ref,JSON.stringify(ref.fact||{})].join(' '))].join(' ').toLowerCase();const sourceMatch=!source||refs.some(ref=>ref.source_kind===source);const toolMatch=!tool||refs.some(ref=>(ref.fact||{}).tool===tool);node.style.display=(!track||d.track===track)&&sourceMatch&&toolMatch&&(!q||hay.includes(q))?'':'none'})}function closeDrawer(){$('#drawer').classList.remove('open');$('#backdrop').classList.remove('open')}$('#refresh').addEventListener('click',()=>location.reload());$('#drawerX').addEventListener('click',closeDrawer);$('#backdrop').addEventListener('click',closeDrawer);$('#toggle').addEventListener('click',()=>{$('#details').classList.toggle('open');$('#toggle').textContent=$('#details').classList.contains('open')?'收起未收口事项':'查看未收口事项'});$('#density').addEventListener('click',()=>{const timeline=$('#timeline');timeline.classList.toggle('overview');$('#density').textContent=timeline.classList.contains('overview')?'展开细节':'收起细节'});$('#stageToggle').addEventListener('click',()=>{const key=`sessionmap:stage-mode:${DATA.workspace?.id||'workspace'}`;localStorage.setItem(key,localStorage.getItem(key)==='1'?'0':'1');render()});$('#smallToggle').addEventListener('click',()=>{const key=`sessionmap:small-events:${DATA.workspace?.id||'workspace'}`;localStorage.setItem(key,localStorage.getItem(key)==='0'?'1':'0');render()});$('#filterButton').addEventListener('click',()=>$('#filters').classList.toggle('open'));$('#trackFilter').addEventListener('change',applyFilters);$('#sourceFilter').addEventListener('change',applyFilters);$('#toolFilter').addEventListener('change',applyFilters);$('#searchInput').addEventListener('input',applyFilters);$('#clearFilter').addEventListener('click',()=>{$('#trackFilter').value='';$('#sourceFilter').value='';$('#toolFilter').value='';$('#searchInput').value='';applyFilters()});document.addEventListener('keydown',event=>{if(event.key==='/'&&document.activeElement?.tagName!=='INPUT'){event.preventDefault();$('#filters').classList.add('open');$('#searchInput').focus()}});render();</script></body></html>'''
+:root{--paper:#f5f5f7;--ink:#1d1d1f;--muted:#86868b;--line:#e5e5ea;--accent:#ff3b30;color-scheme:light}
+*{box-sizing:border-box}html{background:var(--paper)}body{margin:0;background:var(--paper);color:var(--ink);font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased}
+button{font:inherit;cursor:pointer;color:inherit}.mono{font-family:"Cascadia Mono","SFMono-Regular",Consolas,monospace}
+.page{max-width:860px;margin:0 auto;padding:54px 30px 80px}
+.head{display:flex;justify-content:space-between;align-items:start;gap:20px}
+.eyebrow{font-size:10px;letter-spacing:.14em;color:var(--muted);text-transform:uppercase}
+h1{max-width:760px;margin:12px 0 6px;font-size:clamp(26px,3.6vw,40px);font-weight:500;line-height:1.1;letter-spacing:-.04em}
+.meta{color:var(--muted);font-size:11px}
+.head button{border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.7);padding:6px 11px;font-size:11px;white-space:nowrap}
+.head button:hover{background:#fff}
+.status{margin-top:20px;font-size:12px;color:var(--muted);display:flex;gap:14px;flex-wrap:wrap}
+.status b{color:var(--ink);font-weight:500}
+.status .sep{color:var(--line)}
+.delta{margin-top:8px;font-size:11px;color:var(--muted)}
+.delta strong{color:var(--ink);font-weight:500}
+.line-head{display:flex;justify-content:space-between;align-items:baseline;gap:14px;margin:38px 0 8px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+.line-head h2{margin:0;font-size:13px;font-weight:500;letter-spacing:.02em}
+.line-head span{font-size:11px;color:var(--muted)}
+.line-head .tools{display:flex;gap:12px}
+.line-head button{border:0;background:none;padding:0;font-size:11px;color:var(--muted)}
+.line-head button:hover{color:var(--ink)}
+.timeline{position:relative;margin-top:4px}
+.timeline::before{content:"";position:absolute;left:5px;top:6px;bottom:6px;width:1px;background:var(--line)}
+.day{font-size:10px;letter-spacing:.1em;color:var(--muted);text-transform:uppercase;margin:20px 0 2px;padding-top:14px;border-top:1px solid var(--line)}
+.day:first-child{border-top:0;padding-top:4px;margin-top:0}
+.node{position:relative;padding:7px 0 7px 22px;cursor:pointer;border-radius:6px}
+.node:hover{background:rgba(255,255,255,.6)}
+.node:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.node .mark{position:absolute;left:0;top:13px;width:11px;height:11px;border-radius:50%;background:var(--paper);border:1.5px solid var(--ink)}
+.node.s-done .mark{background:var(--ink)}
+.node.milestone .mark{background:var(--accent);border-color:var(--accent);border-radius:2px;transform:rotate(45deg);width:9px;height:9px;top:14px}
+.node .title{font-size:14px;font-weight:500;line-height:1.45}
+.node .row{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.node .meta{font-size:11px;color:var(--muted)}
+.node.milestone .title{font-weight:600}
+.node.fact{padding-left:34px;cursor:pointer}
+.node.fact:hover{background:none}
+.node.fact .mark{display:none}
+.node.fact .title{font-size:12px;font-weight:400;color:var(--muted);line-height:1.5}
+.node.fact.commit .title{font-family:"Cascadia Mono","SFMono-Regular",Consolas,monospace;font-size:11px}
+.node.fact.decision .title::before{content:"· ";color:var(--muted)}
+.node.fact.small .title{font-size:11px}
+.node.fact .why{display:none;margin-top:2px;font-size:11px;color:var(--muted)}
+.timeline.detail .node.fact .why{display:block}
+.timeline.detail .node .what{display:block}
+.node .what{display:none;margin-top:3px;font-size:12px;color:var(--muted);line-height:1.55}
+.cut{position:relative;margin:8px 0 8px 22px;padding:9px 12px;border-left:2px solid var(--accent);background:rgba(255,59,48,.045);font-size:12px;color:var(--muted)}
+.cut strong{color:var(--accent);font-weight:500}
+.caption{margin-top:14px;font-size:11px;color:var(--muted);display:flex;justify-content:space-between;gap:14px}
+.tail{display:flex;justify-content:space-between;align-items:baseline;gap:16px;margin-top:22px;font-size:11px;color:var(--muted)}
+.tail strong{color:var(--ink);font-weight:500}
+.tail button{border:0;background:none;padding:0;font-size:11px;color:var(--ink);border-bottom:1px solid var(--line)}
+.details{display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+.details.open{display:block}
+.details p{margin:5px 0}.details p:before{content:"· ";color:var(--accent)}
+footer{margin-top:44px;font-size:10px;color:var(--muted)}
+.backdrop{position:fixed;inset:0;z-index:5;display:none;background:rgba(32,33,29,.14)}.backdrop.open{display:block}
+.drawer{position:fixed;z-index:6;top:0;right:0;bottom:0;width:min(440px,94vw);padding:28px 28px 40px;overflow:auto;background:rgba(245,245,247,.96);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);box-shadow:-18px 0 50px rgba(0,0,0,.12);transform:translateX(104%);transition:transform .22s cubic-bezier(.22,.61,.36,1)}
+.drawer.open{transform:translateX(0)}
+.drawer-close{float:right;border:0;background:none;color:var(--muted);font-size:20px;line-height:1}
+.drawer h2{margin:32px 0 4px;font-size:23px;line-height:1.25;font-weight:500;letter-spacing:-.03em}
+.drawer-meta{color:var(--muted);font-size:11px}
+.drawer-section{margin-top:22px;padding-top:10px;border-top:1px solid var(--line)}
+.drawer-section h3{margin:0 0 6px;color:var(--muted);font-size:10px;letter-spacing:.1em;text-transform:uppercase;font-weight:500}
+.drawer-section p{margin:0;font-size:13px;line-height:1.7}
+.drawer-section ul{margin:0;padding:0;list-style:none}
+.drawer-section li{padding:8px 0;border-bottom:1px solid var(--line);font-size:12px;line-height:1.6}
+.drawer-section li:last-child{border-bottom:0}
+.ev-meta{color:var(--muted);font-size:10px;font-family:"Cascadia Mono",monospace}
+.ev-fact{margin-top:2px;color:var(--muted);font-size:11px;overflow-wrap:anywhere}
+.ev-ref{margin-top:2px;color:var(--muted);font-size:10px;font-family:"Cascadia Mono",monospace;overflow-wrap:anywhere}
+.evidence blockquote{margin:4px 0 0;font-size:12px;line-height:1.6;color:var(--ink)}
+.evidence a{color:var(--muted);font-size:11px}
+.tag{display:inline-block;padding:1px 6px;border:1px solid var(--line);border-radius:5px;font-size:10px;color:var(--muted);margin-right:4px}
+.tag.open{color:var(--ink);border-color:var(--ink)}
+.tag.done{color:var(--muted)}
+.tag.bugfix{color:var(--accent);border-color:var(--accent)}
+@media(prefers-reduced-motion:reduce){.drawer{transition:none}}
+@media(max-width:640px){.page{padding:36px 16px 64px}.head{display:block}.head button{margin-top:14px}.node.fact{padding-left:26px}.caption{display:block}.caption span{display:block;margin-top:4px}}
+::selection{background:rgba(255,59,48,.16)}::-webkit-scrollbar{width:10px}::-webkit-scrollbar-thumb{background:#c7c7cc;border:3px solid var(--paper);border-radius:10px}
+</style></head><body><main class="page"><header class="head"><div><div class="eyebrow">PROJECT MEMORY / __SOURCE__</div><h1 id="headline"></h1><div class="meta" id="period"></div></div><button id="refresh">刷新</button></header><div class="status" id="status"></div><div class="delta" id="delta"></div><div class="line-head"><h2>事件线</h2><span>工作项与里程碑 · 点击看证据</span><div class="tools"><button id="density">展开细节</button><button id="smallToggle">补充事件</button></div></div><div class="timeline" id="timeline"></div><div class="caption"><span>节点是项目推进的骨架，不是每一条消息。</span><span id="breakCaption"></span></div><div class="tail"><span id="tail"></span><button id="toggle">查看未收口事项</button></div><div class="details" id="details"></div><footer id="footer"></footer></main><div class="backdrop" id="backdrop"></div><aside class="drawer" id="drawer"><button class="drawer-close" id="drawerX">×</button><div class="eyebrow" id="drawerEyebrow">PROJECT / EVIDENCE</div><h2 id="drawerTitle"></h2><div class="drawer-meta" id="drawerMeta"></div><div id="drawerBody"></div></aside><script>
+const DATA=__DATA__;const $=s=>document.querySelector(s);
+const statusText={open:'进行中',done:'已完成',abandoned:'已放弃',fact:'事实'};
+const kindText={feature:'功能',bugfix:'修复',investigation:'调研',refactor:'重构',release:'发布',milestone:'里程碑',commit:'提交'};
+function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function byTime(a,b){return (a.when_ms||0)-(b.when_ms||0)}
+function dayOf(ms){if(!ms)return '';const d=new Date(ms);return String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function whenShort(ms){if(!ms)return '';const d=new Date(ms);return String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')}
+function progress(){return DATA.progress||{work_items:[],milestones:[],commits:[],phases:[]}}
+function workItems(){return progress().work_items||[]}
+function milestones(){return progress().milestones||[]}
+function commits(){return progress().commits||[]}
+function allDecisions(){return [...(DATA.decisions||[])]}
+function allSmall(){return (DATA.small_events||[]).filter(x=>!['git_commit','memory_break'].includes(x.event_type)&&String(x.title||'').trim().length>1)}
+function findItem(id){return [...workItems(),...milestones(),...commits(),...allDecisions(),...allSmall()].find(x=>x.id===id)}
+
+function spineRow(item,type){
+  const isWork=type==='work';
+  const status=item.status||'done';
+  const kind=isWork?(kindText[item.kind]||'功能'):'里程碑';
+  const bits=[kind,statusText[status]||status];
+  if(isWork){if(item.session_count)bits.push(item.session_count+' 会话');if(item.file_count)bits.push(item.file_count+' 文件');}
+  else if(item.what)bits.push(item.what);
+  return `<article class="node ${isWork?'work':'milestone'} s-${esc(status)}" data-id="${esc(item.id)}" data-type="${esc(type)}" tabindex="0" aria-label="查看：${esc(item.title)}"><span class="mark"></span><div class="row"><span class="title">${esc(item.title)}</span><span class="meta">${esc(bits.join(' · '))}</span></div>${isWork&&item.files&&item.files.length?`<div class="what">${esc(item.files.slice(0,3).join(' · '))}</div>`:''}</article>`;
+}
+function factRow(item,kind){
+  const cls=kind==='commit'?'commit':kind==='decision'?'decision':'small';
+  const title=kind==='decision'?(item.title||''):(item.title||item.summary||'');
+  const why=kind==='decision'?(item.why||''):(item.why||'');
+  return `<article class="node fact ${cls}" data-id="${esc(item.id)}" data-type="${esc(kind)}" tabindex="0" aria-label="查看：${esc(title)}"><div class="title">${esc(title)}</div>${why?`<div class="why">${esc(why)}</div>`:''}</article>`;
+}
+function cutRow(b){return `<div class="cut"><strong>记忆断裂</strong> · 丢失 ${esc(b.loss_pct)}% · ${Number(b.pre_tokens||0).toLocaleString()} → ${Number(b.post_tokens||0).toLocaleString()} token</div>`}
+function dayRow(day){return `<div class="day">${esc(day)}</div>`}
+
+function buildRows(){
+  const spine=[...workItems().map(x=>({...x,_type:'work',_order:0})),...milestones().map(x=>({...x,_type:'milestone',_order:0}))];
+  const facts=[...commits().map(x=>({...x,_kind:'commit',_order:1})),...allDecisions().map(x=>({...x,_kind:'decision',_order:1})),...(smallOn?allSmall():[]).map(x=>({...x,_kind:'small',_order:1}))];
+  const breaks=(DATA.breaks||[]).map(x=>({...x,_kind:'break',when_ms:x.at||x.when_ms,title:'记忆断裂',_order:0}));
+  const all=[...spine,...facts,...breaks].sort((a,b)=>(a.when_ms||0)-(b.when_ms||0)||(a._order??3)-(b._order??3));
+  const rows=[];let lastDay='';
+  for(const item of all){
+    const day=dayOf(item.when_ms);if(day&&day!==lastDay){rows.push(dayRow(day));lastDay=day}
+    if(item._type){rows.push(spineRow(item,item._type));continue}
+    if(item._kind==='break'){rows.push(cutRow(item));continue}
+    rows.push(factRow(item,item._kind));
+  }
+  return rows.join('');
+}
+
+function render(){
+  const s=DATA.stats||{};const p=progress();
+  $('#headline').textContent=DATA.headline||'项目记忆';
+  $('#period').textContent=`${(DATA.workspace&&DATA.workspace.name)||'工作区'} · ${s.first_when||''} → ${s.last_when||''} · ${s.sessions||0} 个会话`;
+  const st=p.stats||{};
+  const openWi=(p.work_items||[]).filter(x=>x.status==='open').length;
+  const doneWi=(p.work_items||[]).filter(x=>x.status==='done').length;
+  $('#status').innerHTML=`<span><b>${openWi}</b> 进行中</span><span class="sep">·</span><span><b>${doneWi}</b> 已完成</span><span class="sep">·</span><span><b>${(p.milestones||[]).length}</b> 里程碑</span><span class="sep">·</span><span><b>${(p.commits||[]).length}</b> 提交</span><span class="sep">·</span><span><b>${(DATA.unfinished||[]).length}</b> 件事未收口</span>`;
+  const viewKey=`sessionmap:last-view:${(DATA.workspace&&DATA.workspace.id)||'workspace'}`;
+  const previous=Number(localStorage.getItem(viewKey)||0);
+  const changes=DATA.changes||[];
+  const freshChanges=changes.filter(c=>(c.at||0)>previous);
+  const countKind=kind=>freshChanges.filter(c=>c.kind===kind).length;
+  const parts=[];
+  if(countKind('decision'))parts.push(`${countKind('decision')} 个决策`);
+  if(countKind('todo'))parts.push(`${countKind('todo')} 个待办变化`);
+  if(countKind('git_commit'))parts.push(`${countKind('git_commit')} 个提交`);
+  if(countKind('memory_break'))parts.push(`${countKind('memory_break')} 次记忆断裂`);
+  $('#delta').innerHTML=previous?`<strong>自上次查看：</strong>${freshChanges.length?parts.join('、')||`${freshChanges.length} 项事实变化`:'没有新的项目变化'}`:'<strong>首次查看：</strong>已建立项目记忆基线';
+  $('#timeline').innerHTML=buildRows();
+  $('#breakCaption').textContent=(DATA.breaks||[]).length?`${(DATA.breaks||[]).length} 次记忆断裂`:'';
+  const open=[...(p.work_items||[])].reverse().find(x=>x.status==='open');
+  $('#tail').innerHTML=`<strong>当前枝头：</strong>${esc(open?open.title:'—')} · ${(DATA.unfinished||[]).length} 件事未收口`;
+  $('#details').innerHTML=(DATA.unfinished||[]).map(x=>`<p>${esc(x.text)}</p>`).join('')||'<p>没有未完成事项。</p>';
+  $('#footer').textContent=`sessionmap · 事实与证据可回溯 · ${new Date(DATA.generated_at).toLocaleString()}`;
+  document.querySelectorAll('.node').forEach(n=>n.addEventListener('click',()=>openItem(n.dataset.id)));
+  document.querySelectorAll('.node').forEach(n=>n.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openItem(n.dataset.id)}}));
+  $('#smallToggle').textContent=smallOn?'隐藏补充':'显示补充';
+  setTimeout(()=>localStorage.setItem(viewKey,String(s.last_at||Date.now())),2500);
+}
+let smallOn=false;
+
+function openItem(id){
+  const item=findItem(id);if(!item)return;
+  const p=progress();
+  const isWork=id.startsWith('wi:'),isMilestone=id.startsWith('milestone:'),isCommit=id.startsWith('commit:');
+  $('#drawerEyebrow').textContent=isWork?'WORK ITEM':isMilestone?'MILESTONE':isCommit?'COMMIT':'EVENT / EVIDENCE';
+  $('#drawerTitle').textContent=item.title||item.id;
+  const status=item.status||'fact';
+  const meta=[whenShort(item.when_ms||item.at)];
+  if(isWork){meta.push(kindText[item.kind]||'功能',statusText[status]||status);if(item.confidence!=null)meta.push('信心 '+item.confidence+' '+item.confidence_band);if(item.span_hours)meta.push(item.span_hours+' 小时');}
+  else if(isMilestone){meta.push('里程碑',item.what||'');}
+  else if(isCommit){meta.push('提交',String(item.sha||'').slice(0,8));}
+  else{meta.push(item.track||'其他',statusText[status]||status);}
+  $('#drawerMeta').textContent=meta.join(' · ');
+  let body='';
+  if(isWork){
+    const decisions=allDecisions().filter(d=>d.work_item_id===item.id);
+    const why=decisions.map(d=>d.why).filter(Boolean).join('；');
+    const what=decisions.map(d=>d.what).filter(Boolean).join('；')||item.title;
+    body+=`<div class="drawer-section"><h3>发生了什么</h3><p>${esc(what||'—')}</p></div>`;
+    if(why)body+=`<div class="drawer-section"><h3>为什么</h3><p>${esc(why)}</p></div>`;
+    if(item.files&&item.files.length)body+=`<div class="drawer-section"><h3>文件</h3><p>${esc(item.files.slice(0,10).join(' · '))}</p></div>`;
+    if(item.open_todos&&item.open_todos.length)body+=`<div class="drawer-section"><h3>未收口</h3><ul>${item.open_todos.slice(0,8).map(t=>`<li>${esc(t.text)} <span class="ev-meta">${esc(t.status||'')}</span></li>`).join('')}</ul></div>`;
+    if(item.commits&&item.commits.length)body+=`<div class="drawer-section"><h3>提交</h3><ul>${item.commits.map(c=>`<li>${esc(c.title)} <span class="ev-meta">${esc(c.when||'')}</span></li>`).join('')}</ul></div>`;
+    if(decisions.length)body+=`<div class="drawer-section"><h3>决策注解</h3><ul>${decisions.map(d=>`<li>${esc(d.title)} <span class="ev-meta">${esc(statusText[d.status]||d.status)}</span></li>`).join('')}</ul></div>`;
+  } else if(isMilestone||isCommit){
+    body+=`<div class="drawer-section"><h3>发生了什么</h3><p>${esc(item.what||item.title||'—')}</p></div>`;
+  } else {
+    body+=`<div class="drawer-section"><h3>发生了什么</h3><p>${esc(item.what||item.summary||'—')}</p></div>`;
+    if(item.why)body+=`<div class="drawer-section"><h3>为什么</h3><p>${esc(item.why)}</p></div>`;
+  }
+  const refs=item.evidence_refs||[];
+  if(refs.length){
+    body+=`<div class="drawer-section"><h3>证据</h3><ul class="evidence">${refs.map(e=>{
+      const fact=e.fact||{};const factText=[e.source_kind,e.event_type,fact.tool||fact.command||fact.path||fact.file_path||fact.sha].filter(Boolean).join(' · ');
+      const rawRef=e.raw_ref||'';
+      return `<li><div class="ev-meta">${esc(e.when||'')} · ${esc(e.session_title||'')}</div>${factText?`<div class="ev-fact">${esc(factText)}</div>`:''}${rawRef?`<div class="ev-ref">来源：${esc(rawRef)}</div>`:''}<blockquote>“${esc(e.quote||'')}”</blockquote></li>`;
+    }).join('')}</ul></div>`;
+  }
+  const repo=DATA.repository||{};const rc=repo.commits||[];
+  const commitText=rc.slice(0,3).map(c=>`${String(c.sha||'').slice(0,8)} ${c.subject||''}`).join(' · ');
+  body+=`<div class="drawer-section"><h3>Git 事实</h3><p>${repo.branch?`${esc(repo.branch)} · ${String(repo.head_sha||'').slice(0,8)} · ${repo.changed_count||0} 个改动文件${commitText?' · 最近提交：'+esc(commitText):''}`:'暂无 Git 快照'}</p></div>`;
+  $('#drawerBody').innerHTML=body;
+  $('#drawer').classList.add('open');$('#backdrop').classList.add('open');
+}
+function closeDrawer(){$('#drawer').classList.remove('open');$('#backdrop').classList.remove('open')}
+$('#refresh').addEventListener('click',()=>location.reload());
+$('#drawerX').addEventListener('click',closeDrawer);
+$('#backdrop').addEventListener('click',closeDrawer);
+$('#toggle').addEventListener('click',()=>{$('#details').classList.toggle('open');$('#toggle').textContent=$('#details').classList.contains('open')?'收起未收口事项':'查看未收口事项'});
+$('#density').addEventListener('click',()=>{const t=$('#timeline');t.classList.toggle('detail');$('#density').textContent=t.classList.contains('detail')?'收起细节':'展开细节';});
+$('#smallToggle').addEventListener('click',()=>{smallOn=!smallOn;render()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDrawer()});
+render();
+</script></body></html>'''
 
 
+EVIDENCE_TEMPLATE = r'''<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>原始证据 · sessionmap</title><style>body{max-width:820px;margin:0 auto;padding:40px 22px;background:#f5f5f7;color:#1d1d1f;font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}a{color:#6e6e73}h1{font-size:32px;font-weight:500;letter-spacing:-.04em}h2{margin-top:32px;font-size:17px;font-weight:500;border-top:1px solid #a1a1a6;padding-top:12px}.meta,pre{color:#6e6e73;font:12px/1.6 "Cascadia Mono",Consolas,monospace}blockquote{margin:10px 0;padding-left:14px;border-left:2px solid #ff3b30}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#fff;padding:14px;border:1px solid #d2d2d7;border-radius:8px}</style></head><body><a href="javascript:history.back()">← 返回事件线</a><main id="app"></main><script>const DATA=__DATA__;const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));const id=decodeURIComponent(location.hash.replace(/^#event=/,''));const all=[...(DATA.progress?.work_items||[]),...(DATA.progress?.milestones||[]),...(DATA.progress?.commits||[]),...(DATA.decisions||[]),...(DATA.small_events||[])];let item=all.find(x=>x.id===id);let ref=null;if(!item)for(const candidate of all){const found=(candidate.evidence_refs||[]).find(x=>x.event_id===id);if(found){item=candidate;ref=found;break}}if(item&&!ref)ref=(item.evidence_refs||[])[0];const app=document.querySelector('#app');if(!item){app.innerHTML='<h1>找不到证据</h1><p>这个事件可能来自另一份本地视图。</p>'}else{const payload=ref?.payload||ref?.fact||{};const what=item.what||item.summary||item.title||'';app.innerHTML=`<h1>${esc(item.title||item.id)}</h1><div class="meta">${esc(item.when||'—')} · ${esc(item.track||item.kind||'')}</div><h2>发生了什么</h2><p>${esc(what)}</p>${item.why?`<h2>为什么</h2><p>${esc(item.why)}</p>`:''}<h2>原始引用</h2><div class="meta">${esc(ref?.source_kind||'')} · ${esc(ref?.event_type||'')} · ${esc(ref?.session_title||'')} · ${esc(ref?.raw_ref||'')}</div><blockquote>“${esc(ref?.quote||'—')}”</blockquote><h2>原始事实载荷</h2><pre>${esc(JSON.stringify(payload,null,2))}</pre>`}</script></body></html>'''
 
-EVIDENCE_TEMPLATE = r'''<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>原始证据 · sessionmap</title><style>body{max-width:820px;margin:0 auto;padding:40px 22px;background:#f5f5f7;color:#1d1d1f;font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}a{color:#6e6e73}h1{font-size:32px;font-weight:500;letter-spacing:-.04em}h2{margin-top:32px;font-size:17px;font-weight:500;border-top:1px solid #a1a1a6;padding-top:12px}.meta,pre{color:#6e6e73;font:12px/1.6 "Cascadia Mono",Consolas,monospace}blockquote{margin:10px 0;padding-left:14px;border-left:2px solid #ff3b30}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#fff;padding:14px;border:1px solid #d2d2d7;border-radius:8px}</style></head><body><a href="javascript:history.back()">← 返回事件线</a><main id="app"></main><script>const DATA=__DATA__;const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));const id=decodeURIComponent(location.hash.replace(/^#event=/,''));const all=[...(DATA.decisions||[]),...(DATA.small_events||[])];let item=all.find(x=>x.id===id);let ref=null;if(!item)for(const candidate of all){const found=(candidate.evidence_refs||[]).find(x=>x.event_id===id);if(found){item=candidate;ref=found;break}}if(item&&!ref)ref=(item.evidence_refs||[])[0];const app=document.querySelector('#app');if(!item){app.innerHTML='<h1>找不到证据</h1><p>这个事件可能来自另一份本地视图。</p>'}else{const payload=ref?.payload||ref?.fact||{};app.innerHTML=`<h1>${esc(item.title||item.id)}</h1><div class="meta">${esc(item.when||'—')} · ${esc(item.track||'')}</div><h2>发生了什么</h2><p>${esc(item.what||item.evidence||'—')}</p><h2>为什么</h2><p>${esc(item.why||'—')}</p><h2>原始引用</h2><div class="meta">${esc(ref?.source_kind||'')} · ${esc(ref?.event_type||'')} · ${esc(ref?.session_title||'')} · ${esc(ref?.raw_ref||'')}</div><blockquote>“${esc(ref?.quote||'—')}”</blockquote><h2>原始事实载荷</h2><pre>${esc(JSON.stringify(payload,null,2))}</pre>`}</script></body></html>'''
 
 def render(view_path: str, out_path: str) -> None:
     data = json.loads(Path(view_path).read_text(encoding="utf-8"))
@@ -41,7 +252,7 @@ def render(view_path: str, out_path: str) -> None:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="生成极简事件线 sessionmap 页面")
+    ap = argparse.ArgumentParser(description="生成项目推进事件线 sessionmap 页面")
     ap.add_argument("view")
     ap.add_argument("--out", default="report.html")
     args = ap.parse_args()

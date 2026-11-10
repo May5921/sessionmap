@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from canonical_timeline import build_canonical_timeline
+from progress import build_progress
 
 
 def parse_time(value: str | int | None) -> int | None:
@@ -308,6 +309,7 @@ def small_events(events: list[dict[str, Any]], linked_event_ids: set[str],
 def build_view(store_path: str, timeline_path: str | None = None, out_path: str | None = None,
                workspace_id: str | None = None, include_pending_facts: bool = False) -> dict[str, Any]:
     canonical = build_canonical_timeline(store_path, workspace_id)
+    progress = build_progress(canonical)
     workspace = canonical["workspace"]
     sessions = canonical["sessions"]
     events = canonical["events"]
@@ -387,6 +389,16 @@ def build_view(store_path: str, timeline_path: str | None = None, out_path: str 
             item["evidence_refs"] = evidence_for(item, events, session_map)
         item["evidence_count"] = len(item["evidence_refs"])
         decisions.append(item)
+
+    # Attach each semantic decision to the work item it belongs to, so the
+    # spine stays the primary structure and decisions read as annotations.
+    for item in decisions:
+        when = item.get("when_ms") or 0
+        for work in progress.get("work_items") or []:
+            tolerance = 30 * 60 * 1000
+            if (work.get("when_ms") or 0) - tolerance <= when <= (work.get("end_ms") or 0) + tolerance:
+                item["work_item_id"] = work.get("id")
+                break
 
     # Pending and facts-only projections are already visible as decision rows;
     # keep their source events out of the supplementary list to avoid showing
@@ -501,6 +513,7 @@ def build_view(store_path: str, timeline_path: str | None = None, out_path: str 
         "changes": changes,
         "breaks": breaks,
         "decisions": decisions,
+        "progress": progress,
         "small_events": supplement,
         "tracks": [tracks[name] for name in track_order],
         "sessions": session_views,

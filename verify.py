@@ -163,7 +163,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     # The event line is client-rendered from DATA, so the concrete article
     # count is verified from the view above.  Here we verify that the shipped
     # template contains both renderers and the mount point used by the browser.
-    if "function eventRow" in report_text and 'id="timeline"' in report_text and "DATA=" in report_text:
+    if "function spineRow" in report_text and "function factRow" in report_text and 'id="timeline"' in report_text and "DATA=" in report_text:
         ok(checks, "render.event_template", f"{expected['decisions']} events from DATA")
     else:
         fail(checks, "render.event_template", "event line template or mount point missing")
