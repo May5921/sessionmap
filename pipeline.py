@@ -32,22 +32,15 @@ def main() -> None:
     ap.add_argument("workspace", help="工作区名称或路径关键字，例如 pi-mini")
     ap.add_argument("--db", default=SOURCE_DB, help="ZCode 源数据库，只读")
     ap.add_argument("--cli", default=None, help="--extract 时使用的本机 CLI")
-    ap.add_argument("--extract", action="store_true", help="调用本机 CLI 重新提炼 timeline.json")
-    ap.add_argument("--incremental", action="store_true",
-                    help="--extract 时只提炼 semantic.py --plan 标出的受影响节点")
+    ap.add_argument("--extract", action="store_true",
+                    help="调用本机 CLI 重新提炼语义（会话原文会离开本机，默认不做）")
     ap.add_argument("--no-proxy", action="store_true",
                     help="只对本次本机 CLI 调用移除代理环境变量，不修改系统配置")
-    ap.add_argument("--chunked", action="store_true",
-                    help="--extract 时按日期/会话分片提炼长时间线")
-    ap.add_argument("--chunk-chars", type=int, default=12000,
-                    help="分片字符上限，默认 12000")
     ap.add_argument("--no-merge", action="store_true",
                     help="关闭同一仓库下多 Agent canonical store 的自动合并")
     ap.add_argument("--workspace-id", default=None, help="多工作区 store 中明确选择的 workspace_id")
     ap.add_argument("--out", default=str(ROOT), help="输出目录，默认当前 sessionmap 目录")
     args = ap.parse_args()
-    if args.chunked and args.incremental:
-        ap.error("--chunked 不能和 --incremental 同时使用")
     out = Path(args.out).resolve()
     out.mkdir(parents=True, exist_ok=True)
     store = out / "sessionmap.db"
@@ -55,32 +48,20 @@ def main() -> None:
     timeline_json = out / "timeline.json"
     view = out / "project-view.json"
     canonical_timeline = out / "canonical-timeline.json"
-    report = out / "report.html"
+    timeline_html = out / "timeline.html"
     workspace_args = ["--workspace-id", args.workspace_id] if args.workspace_id else []
 
     run("同步 ZCode 和 Git 事实", [str(ROOT / "sync.py"), args.workspace, "--db", args.db, "--out", str(store)])
     run("生成规则时间线", [str(ROOT / "scan.py"), args.workspace, "--db", args.db, "--verbose", "--out", str(timeline_md)])
     if args.extract or not timeline_json.exists():
+        print("[sessionmap] 警告：--extract 会把会话原文交给本机 CLI，若该 CLI 走云端 API，内容即离开本机",
+              file=sys.stderr)
         extract_args = [str(ROOT / "extract.py"), str(timeline_md), "--out", str(timeline_json)]
-        incremental_run = False
-        if args.incremental and timeline_json.exists():
-            plan = out / "semantic-incremental-plan.json"
-            run("计算受影响语义范围", [str(ROOT / "semantic.py"), str(store), str(timeline_json),
-                                      "--plan", "--plan-out", str(plan), *workspace_args])
-            plan_data = json.loads(plan.read_text(encoding="utf-8"))
-            if plan_data.get("mode") in {"changed", "matched"}:
-                extract_args.extend(["--incremental-from", str(timeline_json),
-                                      "--incremental-plan", str(plan)])
-                incremental_run = True
-            else:
-                print("[sessionmap] 增量范围为 %s，回退到完整语义提炼" % plan_data.get("mode"), file=sys.stderr)
         if args.cli:
             extract_args.extend(["--cli", args.cli])
         if args.no_proxy:
             extract_args.append("--no-proxy")
-        if args.chunked:
-            extract_args.extend(["--chunked", "--chunk-chars", str(args.chunk_chars)])
-        run("增量提炼受影响语义" if incremental_run else "调用本机 CLI 提炼语义", extract_args)
+        run("调用本机 CLI 提炼语义", extract_args)
     else:
         print("[sessionmap] 复用已有 timeline.json（需要新语义时加 --extract）", file=sys.stderr)
     run("生成证据匹配", [str(ROOT / "view.py"), str(store), str(timeline_json), "--out", str(view), *workspace_args])
@@ -98,9 +79,10 @@ def main() -> None:
         final_canonical = out / "merged-canonical-timeline.json"
         run("生成多 Agent 合并视图", [str(ROOT / "view.py"), str(final_store), str(timeline_json), "--out", str(final_view)])
         run("生成合并时间线", [str(ROOT / "canonical_timeline.py"), str(final_store), "--out", str(final_canonical)])
-    run("渲染事件线", [str(ROOT / "eventline_dashboard.py"), str(final_view), "--out", str(report)])
+    run("渲染项目时间线", [str(ROOT / "timeline_view.py"), str(final_view), "--out", str(timeline_html)])
     print(json.dumps({"store": str(final_store), "timeline": str(timeline_json), "canonical_timeline": str(final_canonical),
-                      "view": str(final_view), "report": str(report), "merged_sources": len(source_stores) if not args.no_merge else 1}, ensure_ascii=False, indent=2))
+                      "view": str(final_view), "page": str(timeline_html),
+                      "merged_sources": len(source_stores) if not args.no_merge else 1}, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":

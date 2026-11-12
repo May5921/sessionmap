@@ -5,14 +5,8 @@
 ## 运行
 
 ```powershell
-python sync.py pi-mini --out sessionmap.db
-python view.py sessionmap.db timeline.json --out project-view.json
-python progress.py sessionmap.db --out progress.json
-python semantic.py sessionmap.db timeline.json --view project-view.json
-python semantic.py sessionmap.db timeline.json --plan --plan-out semantic-incremental-plan.json
-python extract.py timeline.md --incremental-from timeline.json --incremental-plan semantic-incremental-plan.json --out timeline.json
-python eventline_dashboard.py project-view.json --out report.html
-python verify.py
+python pipeline.py pi-mini
+python verify.py --page timeline.html
 python -m unittest discover -s tests -t . -p "test_*.py"
 python adapters.py --home $env:USERPROFILE
 python consistency.py project-view.json
@@ -30,14 +24,14 @@ Claude 的原始 `type` 会统一映射为 canonical event type，并在 payload
 - `pi-mini` 黄金样本中的关键决策、状态、工作线和用户证据是否匹配；
 - 每个决策是否至少有一条可回溯证据；
 - 记忆断裂是否被正确合并；
-- HTML 中事件和断裂标记的数量是否正确。
+- 页面是否只有一个表面：当前枝头、时间线、单一时间范围控件；搜索、来源筛选和二级证据页必须不存在；放弃的结论必须划掉。
 - 语义层是否按输入哈希幂等写入分析运行、决策和证据链接。
 
-当前自动化单元测试为 **44 passed**，覆盖六种适配器的统一事件契约、幂等导入、内容指纹变化、部分导入告警、跨来源工作区合并与去重、合并语义备注保留、canonical timeline、facts-only fallback、子会话高信号文本提取、语义节点 manifest、增量语义计划与合并、分片语义切分与合并、超限输入拒绝、小事件归属与嵌入、未归属事实展示、证据深链、快照对比、矛盾检查、人工修正、搜索、脱敏导出、待提炼事实、首屏事件线状态，以及 `progress.py` 的确定性工作项/里程碑/阶段/信心度投影。
+当前自动化单元测试为 **45 passed**，覆盖六种适配器的统一事件契约、幂等导入、内容指纹变化、部分导入告警、跨来源工作区合并与去重、合并语义备注保留、canonical timeline、facts-only fallback、子会话高信号文本提取、语义节点 manifest、增量语义计划与合并（内部能力，CLI 已移除）、分片语义切分与合并、超限输入拒绝、小事件归属与嵌入、快照对比、矛盾检查、人工修正、搜索、待提炼事实、单页时间线的回来第一屏与反转标记，以及 `progress.py` 的确定性工作项/里程碑/信心度投影和工作项首尾原话抽取。
 
-`progress.py` 只读 canonical 事实，不调用模型：主会话（含后代）聚成工作项，git 发布提交成为里程碑，TODO 状态机与会话结果推导状态，文件重叠/提交链接/会话广度/来源广度/时间跨度合成信心度。事件线渲染时以工作项和里程碑为骨架，语义决策降为注解，小事件默认隐藏。
+`progress.py` 只读 canonical 事实，不调用模型：主会话（含后代）聚成工作项，git 发布提交成为里程碑，TODO 状态机与会话结果推导状态，文件重叠/提交链接/会话广度/来源广度/时间跨度合成信心度。工作项还会取该会话范围内第一条和最后一条用户消息，作为"从哪句开始、停在哪"的唯一证据来源。
 
-自动合并 smoke 会在同一仓库根目录下发现 ZCode、Claude、Codex、Pi、DSH 和 OpenCode 的 canonical store，输出 `sessionmap-merged.db`、`merged-project-view.json`、`merged-canonical-timeline.json`、`report.html` 和 `evidence.html`。合并只读源库，并按 Git commit SHA 等稳定事实去重；跨工具相同事实会保留来源列表。
+自动合并 smoke 会在同一仓库根目录下发现 ZCode、Claude、Codex、Pi、DSH 和 OpenCode 的 canonical store，输出 `sessionmap-merged.db`、`merged-project-view.json`、`merged-canonical-timeline.json` 和 `timeline.html`。合并只读源库，并按 Git commit SHA 等稳定事实去重；跨工具相同事实会保留来源列表。
 
 黄金样本位于 `tests/gold_pi_mini.json`。它只固定少量高价值节点，避免把整个模型输出锁死；新增或修改提炼逻辑时，先更新分析，再明确更新黄金样本。
 

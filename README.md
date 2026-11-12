@@ -1,111 +1,84 @@
 # sessionmap
 
-> This project lost most of its memory and kept going.
+> 这个项目曾经忘记自己做过什么，然后继续往下改。
 
-sessionmap turns a coding workspace into a chronological project story. It reads the local ZCode history, extracts meaningful decisions, marks context breaks, and lets you open the original evidence behind each event.
+sessionmap 把一个编程工作区的历史，压成一条能读的时间线。数据只来自本机的会话记录和 Git，它回答三个问题：**现在在哪、为什么停、下一步是什么**，然后让你一路往下读到项目是怎么一步步改出来的。
 
-The product boundary is deliberate: sessionmap is a **cross-session project memory layer**, not another per-run agent observability dashboard. It explains how a project arrived at its current state, including abandoned decisions, context breaks, Git evidence, and what to resume next.
+它不是运行观测面板（执行图、成本火焰图、文件热力图已有相邻产品在做），也不是架构图或依赖图。它只做一件事：**跨会话的项目记忆**。
 
-See [COMPETITION.md](COMPETITION.md) for the verified adjacent products and the resulting scope.
-
-## Demo
-
-Open `demo/index.html` or serve this directory locally:
-
-```powershell
-python -m http.server 8767
-```
-
-Then open `http://127.0.0.1:8767/demo/`.
-
-The shareable product story is [landing.html](landing.html).
-
-## Refresh the full pipeline
-
-The fast path refreshes local facts, the project view, the persisted semantic
-layer, and the event line without calling a model again:
+## 一个页面
 
 ```powershell
 python pipeline.py pi-mini
 ```
 
-Add `--extract --cli pi` when you intentionally want to re-run semantic
-extraction through the local CLI.
+产出 `timeline.html`，单文件、无外部依赖，双击就能开。
 
-在已有语义基线后，可以用 `--extract --incremental` 只把事实变化映射到受影响节点；`matched` 会直接复用旧结果，`baseline/unavailable` 会回退到完整提炼。
+页面结构是固定的三层，不再有第二层：
 
-如果本机代理环境不被 CLI 接受，可加 `--no-proxy`；它只影响本次子进程，不修改系统配置。
+1. **当前枝头** —— 正在推进的那个工作项、它停在哪句原话、还没收口的下一步。这是回来时第一眼要看的东西。
+2. **时间线** —— 按日期往下读。工作项和里程碑是骨架，结论挂在它所属的工作项下面。
+3. **展开** —— 每一条都能内联展开：从哪句开始、改了哪些文件、停在哪、原话、来源会话。没有二级页。
 
-超长时间线可以使用 `extract.py --chunked --chunk-chars 12000` 按日期/会话边界分片提炼，再合并决策；任何分片失败都会明确失败，不会生成半截语义结果。非分片模式遇到超过 `--max-chars` 的输入会直接失败，避免静默丢失后半段；只有明确添加 `--allow-truncate` 才会截断。
+唯一的控件是时间范围（全部 / 30 天 / 7 天）。没有搜索、没有来源筛选、没有阶段折叠 —— 那些是审计工具的形状，不是每天会打开的形状。
 
-分片结果会保存完整输入的 SHA-256、分片编号和原始决策 ID，便于核对每个判断来自哪一段事实。完整长时间线仍可能受本机 CLI 的上下文和网络配置限制；遇到超时应使用较小分片或增量提炼。
+被数据证明已经放弃的结论会置灰并划掉；工作项只有在后续工作项改了**三成以上同一批文件**时才会标记"已被后续工作覆盖"，不做语义猜测。
 
-For an existing semantic baseline, add `--incremental` to send only the
-changed evidence and affected decision context to the local CLI. A matched
-refresh reuses the previous result without a model call; a missing baseline
-falls back to the explicit full extraction path.
-
-持续刷新事实和事件线（不调用模型）可以运行：
-
-```powershell
-python watch.py pi-mini --interval 5 --timeline timeline.json
-```
-
-新事实会先以“待提炼”节点出现；需要改变项目语义时，再显式运行
-`pipeline.py --extract`。这样自动刷新不会把未验证的模型推断写进项目故事。
-
-规则时间线保留主会话的叙事骨架，并从每个主会话的子 Agent 会话中追加少量按时间排序、去重的高信号用户文本；子会话的完整工具流水线仍留在 canonical store 和证据抽屉中。
-
-## Current scope
-
-The demo uses a real ZCode workspace (`pi-mini`) as the semantic gold sample. The same canonical event contract now has read-only adapters for Claude, Codex, Pi, DSH and OpenCode. Compressed Codex and DSH streams use the local zstd decoder and clearly report their scan cost. The event line is the product surface; raw events, evidence links, Git facts, and analysis diagnostics stay behind it.
-
-The current story is generated from local records. It does not claim that a viral launch is guaranteed.
-
-## 数据流
+## 数据从哪来
 
 ```text
-source adapter → canonical events → progress spine → semantic decisions/evidence → canonical timeline → event line
+source adapter → canonical events → 工作项/里程碑骨架 → 语义结论注解 → timeline.html
 ```
 
-`progress.py` 是确定性的项目推进骨架：工作项来自主会话边界与文件重叠，里程碑来自 git 发布提交，状态来自 TODO 状态机和会话结果。它只读事实、不调用模型，所以快、可复现、可回退。`canonical_timeline.py` 是工具无关的展示投影，优先读取 `sessionmap.db` 里的最新语义运行，只有在语义层尚未建立时才兼容读取 `timeline.json`。
+- `sync.py` / `adapters.py`：只读本机会话库（ZCode、Claude、Codex、Pi、DSH、OpenCode），归一化成 canonical event。
+- `progress.py`：确定性骨架。工作项来自主会话（含子会话），里程碑来自 git 发布提交，状态来自 TODO 状态机。**不调用模型**，快、可复现。
+- `view.py` / `semantic.py`：证据匹配和语义结论的持久化。结论永远带证据链接。
+- `timeline_view.py`：唯一的渲染器，生成一个自包含页面。
 
-事件线以工作项和里程碑为骨架，语义决策降为注解；低信心不等于事实，未收口事项和记忆断裂留在骨架上。
-
-语义层还会为每次运行保存事实指纹快照和决策节点 manifest。下一次刷新时，`semantic.py --plan` 会把新增、删除或指纹变化的事件映射回上一轮的证据决策，并输出受影响范围；节点 manifest 会标记 `reuse`、`refresh` 或 `removed`。`pipeline.py --extract --incremental` 使用这个只读计划，只把变化事实交给本机 CLI，再把返回的决策 patch 合并回旧结果；matched 时不调用模型。没有历史快照时会明确标记为 `unavailable`，并回退到完整提炼，不会假装完成增量判断。
+`timeline.json` 是语义层的缓存。刷新事实不会重新调用模型：
 
 ```powershell
-python canonical_timeline.py sessionmap.db --workspace-id <id>
+python pipeline.py pi-mini              # 复用已有语义，只刷新事实和页面
+python pipeline.py pi-mini --extract --cli pi   # 显式重新提炼语义
 ```
 
-其他工具可以走同一条事实流水线：
+## 关于隐私，说清楚
+
+默认路径**不联网**：`pipeline.py` 不带 `--extract` 时只读本机文件和本机 SQLite，不调用任何模型。
+
+`--extract` 会把会话原文交给本机 CLI。如果该 CLI 背后走云端 API，**内容就已经离开这台机器**，这一点不因为是"本机 CLI"而改变。运行时它会明确打印这条警告。
+
+因此当前推荐两种用法：
+
+- **不提炼**：只用确定性骨架 + 用户自己用一句 `override.py` 写下为什么。最诚实，零 token，零外发。
+- **本机模型**：接本地小模型抽 `why`，质量会掉，但骨架不依赖它，注解错了不影响阅读。
+
+## 命令
 
 ```powershell
-python adapter_pipeline.py pi --workspace pi-mini --store sessionmap-pi.db --out pi-report.html
-python adapter_pipeline.py dsh --workspace pi-mini --store sessionmap-dsh.db --out dsh-report.html
-```
-
-`pipeline.py` 和 `watch.py` 默认会发现同一仓库根目录下的多个 canonical store 并自动合并；需要单源调试时加 `--no-merge`。也可以手动合并：
-
-```powershell
-python workspace_merge.py sessionmap.db sessionmap-codex.db sessionmap-pi.db sessionmap-dsh.db `
-  --root C:\Users\Luke\projects\pi-mini --out output/pi-mini-merged.db
-```
-
-合并层保留来源、会话和原始引用；它不会修改任何源库。
-
-事件线默认把语义决策作为主骨，再补充最多 18 条未被决策引用的高信号事实（用户消息、Todo、错误、Git、子 Agent 和记忆断裂）。每条补充事实会按会话、来源、文本相关性和时间距离归属到最近的主事件，并保留关联分数与理由；低于 0.55 的事实不伪装成主事件证据，首屏默认只展示已归属或高信号的补充节点，其余事实仍留在事实层。页面把补充节点嵌在对应主事件下面，可以一键隐藏。点击证据后可继续打开同目录的 `evidence.html`，查看原始引用和完整事实载荷。
-
-项目快照和人工修正也保持在本地事实链上：
-
-```powershell
-python compare.py before-view.json project-view.json --out compare.json
-python consistency.py project-view.json --out consistency.json
-python search.py sessionmap.db "切换工作区" --limit 20
+python pipeline.py <workspace>                    # 事实 + 视图 + 页面
+python pipeline.py <workspace> --extract --cli pi # 额外重新提炼语义（会外发原文）
+python watch.py <workspace> --interval 5          # 持续刷新事实和页面，不调模型
+python adapter_pipeline.py pi --workspace pi-mini --store sessionmap-pi.db --out pi-timeline.html
 python override.py sessionmap.db D11 --status done --why "已由 Git 和用户原话确认"
-python privacy.py project-view.json --out share-view.json
+python search.py sessionmap.db "切换工作区"
+python compare.py before-view.json project-view.json
+python consistency.py project-view.json
 ```
 
-`compare.py` 只报告新增、删除、状态变化、事实变化和 Git 字段变化；`consistency.py` 只报告能由当前数据证明的缺口；`override.py` 只写语义层修正表，不改源会话和 Git 仓库。
+多来源合并：同一个仓库根目录下有多个 canonical store 时，`pipeline.py` 会自动合并并保留来源；`--no-merge` 关闭。
 
-没有语义运行时，统一事实流水线仍会生成少量可下钻的事实节点，并明确标记为 `facts-only`，不会把事实包装成模型决策。
+其他工具可以走同一条事实流水线，渲染器不变：
+
+```powershell
+python adapter_pipeline.py claude --workspace pi-mini --store sessionmap-claude.db --out claude-timeline.html
+```
+
+## 边界
+
+- 只读。不改任何源会话库、不写 Git 仓库、不需要用户改工作流。
+- 工作项证据只有会话开始、文件改动和用户原话；**没有逐文件 diff**。说"改了什么文件"可以，说"怎么改的"要看 Git。
+- 单机单人场景。团队协作、云同步、多人权限不在范围内。
+- `extract.py` / `semantic.py` 内部仍保留增量与分片实现，但已经从 CLI 移除 —— 等到真的有大项目跑不动时再接回来。
+
+验证方法见 [TESTING.md](TESTING.md)，相邻产品与产品边界见 [COMPETITION.md](COMPETITION.md)。

@@ -86,10 +86,14 @@ class IncrementalExecutionTests(unittest.TestCase):
             self.assertEqual(before, after)
             self.assertIn("D1", build_incremental_prompt(json.loads(timeline.read_text()), plan))
 
-    def test_pipeline_incremental_falls_back_on_missing_baseline(self):
+    def test_pipeline_no_longer_exposes_incremental_or_chunked(self):
+        # The incremental path is a performance optimisation for a scale we are
+        # not at.  It stays out of the CLI until a real project needs it.
         source = (ROOT / "pipeline.py").read_text(encoding="utf-8")
-        self.assertIn("plan_data.get(\"mode\") in {\"changed\", \"matched\"}", source)
-        self.assertIn("回退到完整语义提炼", source)
+        self.assertNotIn("--incremental", source)
+        self.assertNotIn("--chunked", source)
+        self.assertNotIn("incremental-from", source)
+        self.assertIn("timeline_view.py", source)
 
     def test_extract_rejects_truncation_without_explicit_opt_in(self):
         with tempfile.TemporaryDirectory() as tmp:

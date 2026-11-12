@@ -59,7 +59,7 @@ def refresh(workspace: str, source_db: str, out_dir: Path, workspace_id: str | N
     timeline = timeline_path or (out_dir / "timeline.json")
     view = out_dir / "project-view.json"
     canonical = out_dir / "canonical-timeline.json"
-    report = out_dir / "report.html"
+    report = out_dir / "timeline.html"
     workspace_args = ["--workspace-id", workspace_id] if workspace_id else []
 
     sync_output = run("同步新增事实", [str(ROOT / "sync.py"), workspace,
@@ -89,7 +89,7 @@ def refresh(workspace: str, source_db: str, out_dir: Path, workspace_id: str | N
         run("生成多 Agent 合并视图", [str(ROOT / "view.py"), str(final_store), str(timeline), "--out", str(view)])
     run("生成工具无关时间线", [str(ROOT / "canonical_timeline.py"), str(final_store),
                               "--out", str(canonical)])
-    run("渲染事件线", [str(ROOT / "eventline_dashboard.py"), str(view), "--out", str(report)])
+    run("渲染项目时间线", [str(ROOT / "timeline_view.py"), str(view), "--out", str(report)])
     data: dict[str, Any] = {}
     try:
         data = json.loads(view.read_text(encoding="utf-8"))

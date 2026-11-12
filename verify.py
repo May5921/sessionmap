@@ -159,25 +159,24 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     else:
         fail(checks, "semantic.memory_breaks", f"got {len(breaks)} breaks")
 
-    report_text = Path(args.report).read_text(encoding="utf-8")
-    # The event line is client-rendered from DATA, so the concrete article
-    # count is verified from the view above.  Here we verify that the shipped
-    # template contains both renderers and the mount point used by the browser.
-    if "function spineRow" in report_text and "function factRow" in report_text and 'id="timeline"' in report_text and "DATA=" in report_text:
-        ok(checks, "render.event_template", f"{expected['decisions']} events from DATA")
+    page_text = Path(args.page).read_text(encoding="utf-8")
+    # The page is client-rendered from DATA, so the concrete row count is
+    # verified from the view above.  Here we verify the single shipped surface
+    # still contains its three load-bearing parts.
+    if all(marker in page_text for marker in ('id="ledger"', 'id="range"', 'id="nowNext"', "const DATA=")):
+        ok(checks, "render.single_surface", "re-entry block, ledger and one range control")
     else:
-        fail(checks, "render.event_template", "event line template or mount point missing")
-    if "function cutRow" in report_text and "memory_break" in report_text:
-        ok(checks, "render.break_template", f"{expected['memory_breaks']} breaks from DATA")
+        fail(checks, "render.single_surface", "single page surface or mount points missing")
+    if "row.strike" in page_text and "abandoned" in page_text:
+        ok(checks, "render.reversal_mark", "abandoned rows are struck through")
     else:
-        fail(checks, "render.break_template", "memory break template missing")
-    render_start = report_text.find("function render()")
-    previous_decl = report_text.find("const previous=", render_start)
-    delta_use = report_text.find("$('#delta').innerHTML", render_start)
-    if render_start >= 0 and previous_decl >= 0 and delta_use >= 0 and previous_decl < delta_use:
-        ok(checks, "render.client_state_order", "previous view state is initialized before delta rendering")
+        fail(checks, "render.reversal_mark", "reversal mark missing from the page")
+    for retired in ("evidence.html", "sourceFilter", "toolFilter", 'id="search"'):
+        if retired in page_text:
+            fail(checks, "render.no_retired_controls", f"retired surface still shipped: {retired}")
+            break
     else:
-        fail(checks, "render.client_state_order", "client render reads previous view state before initialization")
+        ok(checks, "render.no_retired_controls", "search, source filter and the second page are gone")
 
     passed = sum(1 for check in checks if check["ok"])
     result = {"passed": passed, "failed": len(checks) - passed, "checks": checks}
@@ -189,7 +188,7 @@ def main() -> None:
     parser.add_argument("--source-db", default=Path(DEFAULT_SOURCE).expanduser())
     parser.add_argument("--store", default=ROOT / "sessionmap.db", help="保留参数，方便后续扩展")
     parser.add_argument("--view", default=ROOT / "project-view.json")
-    parser.add_argument("--report", default=ROOT / "report.html")
+    parser.add_argument("--page", default=ROOT / "timeline.html")
     parser.add_argument("--gold", default=ROOT / "tests" / "gold_pi_mini.json")
     args = parser.parse_args()
     # Expand %USERPROFILE% on Windows when the default was used.

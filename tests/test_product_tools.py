@@ -13,25 +13,56 @@ from compare import compare_views
 from consistency import check_view
 from override import set_override
 from search import search_store
-from privacy import make_share_view
 from sync import SCHEMA
 from view import build_view, small_events
-from eventline_dashboard import render
+from timeline_view import build_model, render as render_timeline
 
 
 class ProductToolTests(unittest.TestCase):
-    def test_eventline_renders_spine_and_hides_small_by_default(self):
-        template = (ROOT / "eventline_dashboard.py").read_text(encoding="utf-8")
-        self.assertIn("function buildRows()", template)
-        self.assertIn("let smallOn=false", template)
-        self.assertIn("workItems().map", template)
-        self.assertIn("milestones().map", template)
-        self.assertIn("data-type=\"${esc(type)}\"", template)
-        self.assertIn('class="ev-ref"', template)
-        # The first view stays quiet: no NEW badge, no source/tool filter clutter.
-        self.assertNotIn("const fresh=new Set", template)
+    def test_timeline_page_is_a_single_surface_with_one_control(self):
+        template = (ROOT / "timeline_view.py").read_text(encoding="utf-8")
+        # One page, one column, one control: the cut is the feature.
+        self.assertIn('id="ledger"', template)
+        self.assertIn('id="range"', template)
+        self.assertNotIn('id="search"', template)
         self.assertNotIn('id="sourceFilter"', template)
         self.assertNotIn('id="toolFilter"', template)
+        self.assertNotIn("phase", template.lower())
+        self.assertNotIn("evidence.html", template)
+
+    def test_reentry_block_answers_stop_and_next(self):
+        data = {
+            "workspace": {"id": "w", "name": "C:/work/demo"},
+            "stats": {"sessions": 1, "first_at": 1_000, "last_at": 2_000},
+            "decisions": [],
+            "breaks": [],
+            "progress": {"milestones": [], "commits": [], "work_items": [
+                {"id": "wi:1", "title": "接入适配器", "kind": "feature", "status": "open",
+                 "when_ms": 1_000, "files": [], "file_count": 0, "session_count": 1,
+                 "opening_quote": "先接 Claude", "closing_quote": "先停在这",
+                 "open_todos": [{"text": "补测试", "status": "in_progress"}],
+                 "evidence_refs": []},
+            ]},
+        }
+        model = build_model(data)
+        self.assertEqual(model["now"]["title"], "接入适配器")
+        self.assertEqual(model["now"]["why_stopped"], "先停在这")
+        self.assertEqual(model["now"]["next_steps"], ["补测试"])
+        self.assertEqual(model["name"], "demo")
+
+    def test_abandoned_decision_is_struck_and_not_summarised_away(self):
+        data = {
+            "workspace": {"id": "w", "name": "demo"}, "stats": {}, "breaks": [],
+            "decisions": [{"id": "D7", "title": "暂停 opencode", "status": "abandoned",
+                            "when_ms": 5_000, "what": "停了", "why": "不再维护",
+                            "evidence_refs": [{"event_type": "user_message", "quote": "停掉吧"}]}],
+            "progress": {"milestones": [], "commits": [], "work_items": []},
+        }
+        model = build_model(data)
+        rows = [row for day in model["days"] for row in day["rows"]]
+        self.assertEqual(len(rows), 1)
+        self.assertTrue(rows[0]["strike"])
+        self.assertEqual(rows[0]["state"], "abandoned")
 
     def test_compare_reports_decision_fact_and_git_changes(self):
         before = {"workspace": {"id": "w"}, "generated_at": 1,
@@ -78,14 +109,6 @@ class ProductToolTests(unittest.TestCase):
             con.close()
             result = search_store(str(path), "工作区", "w")
             self.assertEqual(result[0]["event_id"], "e1")
-
-    def test_privacy_view_removes_paths_and_identifiers(self):
-        result = make_share_view({"workspace": {"source_path": r"C:\secret\repo", "id": "w"},
-                                  "decisions": [{"quote": "read .env", "session_id": "s1"}]})
-        self.assertTrue(result["privacy"]["redacted"])
-        self.assertNotIn("source_path", result["workspace"])
-        self.assertNotIn("session_id", result["decisions"][0])
-        self.assertEqual(result["decisions"][0]["quote"], "<redacted>")
 
     def test_pending_facts_are_explicit_after_semantic_run(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -150,16 +173,21 @@ class ProductToolTests(unittest.TestCase):
         self.assertIsNone(result[0]["anchor_id"])
         self.assertLess(result[0]["attribution_score"], 0.55)
 
-    def test_render_creates_local_evidence_viewer(self):
+    def test_render_writes_one_self_contained_page(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             view = root / "view.json"
-            report = root / "report.html"
+            page = root / "timeline.html"
             view.write_text(json.dumps({"workspace": {"name": "demo", "source": "merged"},
-                                        "stats": {}, "decisions": [], "small_events": []}), encoding="utf-8")
-            render(str(view), str(report))
-            self.assertTrue((root / "evidence.html").exists())
-            self.assertIn("原始事实载荷", (root / "evidence.html").read_text(encoding="utf-8"))
+                                        "stats": {}, "decisions": [], "breaks": [],
+                                        "progress": {"milestones": [], "commits": [], "work_items": []}}),
+                            encoding="utf-8")
+            render_timeline(str(view), str(page))
+            html = page.read_text(encoding="utf-8")
+            self.assertIn("当前枝头", html)
+            self.assertIn("id=\"ledger\"", html)
+            # Evidence now opens inline, so no second file is emitted.
+            self.assertFalse((root / "evidence.html").exists())
 
 
 if __name__ == "__main__":

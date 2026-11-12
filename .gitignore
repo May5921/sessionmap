@@ -36,3 +36,9 @@ benchmarks/*.json
 benchmarks/*.log
 benchmarks/*.db
 benchmarks/*.png
+.alma-snapshots
+
+timeline.html
+adapter-timeline.html
+progress.json
+.shot-*.png

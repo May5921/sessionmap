@@ -238,9 +238,24 @@ def _work_items(main_sessions: list[dict[str, Any]], children: dict[str, list[st
         sources = sorted({str(event.get("source_kind") or "") for event_id in scope
                           for event in events_by_session.get(event_id, [])} - {""})
         evidence: list[dict[str, Any]] = []
+        # The first and last thing the person actually typed are the only two
+        # sentences that answer "why did this start" and "why did it stop".
+        # Without them a work item is just a file list.
+        human: list[dict[str, Any]] = sorted(
+            (event for session_id in scope for event in events_by_session.get(session_id, [])
+             if event.get("event_type") == "user_message"
+             and (event.get("evidence_text") or event.get("summary") or "").strip()),
+            key=lambda event: event.get("occurred_at") or 0,
+        )
+        opening = human[0] if human else None
+        closing = human[-1] if len(human) > 1 else None
+        if opening:
+            evidence.append(_ref(opening))
         for event in events_by_session.get(session["session_id"], []):
             if event.get("event_type") == "session_start":
                 evidence.append(_ref(event))
+        if closing:
+            evidence.append(_ref(closing))
         for path, _count in files.most_common(6):
             evidence.append({
                 "event_id": None, "session_id": None, "session_title": "文件重叠",
@@ -271,6 +286,10 @@ def _work_items(main_sessions: list[dict[str, Any]], children: dict[str, list[st
             "confidence_band": _band(_confidence(files, bool(linked), len(scope), len(sources), span_hours)),
             "open_todos": open_todos,
             "todo_total": len(todos),
+            "opening_quote": (opening.get("evidence_text") or opening.get("summary") or "").strip() if opening else "",
+            "opening_at": opening.get("occurred_at") if opening else None,
+            "closing_quote": (closing.get("evidence_text") or closing.get("summary") or "").strip() if closing else "",
+            "closing_at": closing.get("occurred_at") if closing else None,
             "commits": [{"id": c["id"], "title": c["title"], "when": c["when"], "when_ms": c["when_ms"]} for c in linked],
             "evidence_refs": evidence[:12],
             "evidence_count": len(evidence[:12]),

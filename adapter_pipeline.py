@@ -23,7 +23,7 @@ def main() -> None:
     ap.add_argument("--home", default=None)
     ap.add_argument("--workspace", default=None, help="工作区名称或路径关键字")
     ap.add_argument("--store", default="sessionmap-adapter.db")
-    ap.add_argument("--out", default="adapter-report.html")
+    ap.add_argument("--out", default="adapter-timeline.html")
     args = ap.parse_args()
     store = Path(args.store).resolve()
     view = store.with_name(store.stem + "-view.json")
@@ -34,9 +34,9 @@ def main() -> None:
         sync_args.extend(["--workspace", args.workspace])
     run(sync_args)
     run([str(ROOT / "view.py"), str(store), "--out", str(view)])
-    run([str(ROOT / "eventline_dashboard.py"), str(view), "--out", str(Path(args.out).resolve())])
+    run([str(ROOT / "timeline_view.py"), str(view), "--out", str(Path(args.out).resolve())])
     print(json.dumps({"source": args.source, "store": str(store), "view": str(view),
-                      "report": str(Path(args.out).resolve()), "semantic": "facts-only unless a semantic run is supplied"},
+                      "page": str(Path(args.out).resolve()), "semantic": "facts-only unless a semantic run is supplied"},
                      ensure_ascii=False, indent=2))
 
 
