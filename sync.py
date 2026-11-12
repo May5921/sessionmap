@@ -25,6 +25,8 @@ import sys
 from pathlib import Path
 from typing import Any, Iterable
 
+from session_memory import MEMORY_FTS_SCHEMA, MEMORY_TABLE_SCHEMA
+
 DEFAULT_SOURCE = os.path.expandvars(r"%USERPROFILE%\.zcode\cli\db\db.sqlite")
 DEFAULT_STORE = str(Path(__file__).with_name("sessionmap.db"))
 
@@ -186,6 +188,11 @@ CREATE INDEX IF NOT EXISTS idx_session_workspace ON session(workspace_id, starte
 CREATE INDEX IF NOT EXISTS idx_decision_workspace_time ON decision(workspace_id, occurred_at);
 CREATE INDEX IF NOT EXISTS idx_evidence_decision ON evidence_link(decision_id, rank);
 """
+
+# Brief memory is part of the canonical schema, including its FTS5 mirror.
+# Existing stores created before this table get it via
+# session_memory.ensure_memory_schema() on first use.
+SCHEMA += MEMORY_TABLE_SCHEMA + MEMORY_FTS_SCHEMA
 
 
 def now_ms() -> int:

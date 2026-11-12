@@ -56,6 +56,8 @@ python pipeline.py pi-mini --extract --cli pi   # 显式重新提炼语义
 ## 命令
 
 ```powershell
+python sm.py brief fangzi                        # 项目当前状态摘要（600 字内，带来源引用）
+sm brief fangzi                                  # 已安装到 PATH 的同一命令
 python pipeline.py <workspace>                    # 事实 + 视图 + 页面
 python pipeline.py <workspace> --extract --cli pi # 额外重新提炼语义（会外发原文）
 python watch.py <workspace> --interval 5          # 持续刷新事实和页面，不调模型
@@ -65,6 +67,8 @@ python search.py sessionmap.db "切换工作区"
 python compare.py before-view.json project-view.json
 python consistency.py project-view.json
 ```
+
+`sm brief` 不调用模型：它从 canonical events 和已有 semantic 结论里抽取「在做什么 / 已确定决策 / 卡住的问题」，每条结论都带 event id 或 session id。结论写入 `memory` 表；同一 `claim_key` 的新结论会把旧记录标成 `superseded_by`，`memory.content` 另有 FTS5 索引。
 
 多来源合并：同一个仓库根目录下有多个 canonical store 时，`pipeline.py` 会自动合并并保留来源；`--no-merge` 关闭。
 
